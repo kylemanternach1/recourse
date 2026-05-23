@@ -1,0 +1,11 @@
+node_modules
+out
+out-web
+dist
+.DS_Store
+*.log
+.env
+
+# CA codes scraper output
+scripts/ca_codes/data/
+scripts/ca_codes/.cache/

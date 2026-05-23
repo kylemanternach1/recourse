@@ -1,0 +1,36 @@
+# Copy to config.yaml and edit, or pass --config config.yaml
+base_url: https://law.justia.com
+year: "2025"
+
+# Start with one code; uncomment more after a test run.
+code_slugs:
+  - code-civ
+  # - code-ccp
+  # - code-com
+  # - code-bpc
+
+output: data/ca_codes.jsonl
+# jsonl (streaming, resume-friendly) or json (single array at end)
+output_format: jsonl
+
+# Politeness — total requests/sec across all workers (not per worker).
+rate_limit: 1.0
+workers: 4
+timeout: 30
+retries: 3
+retry_backoff: 1.5
+
+# Limit for test runs; omit or set null for a full crawl.
+max_pages: 5
+# max_sections: 20
+
+# Resume interrupted crawls from state file.
+resume: true
+state_file: data/.ca_codes_state.json
+
+# auto tries curl_cffi (Chrome TLS) then requests.
+# Use playwright if Cloudflare blocks headless requests (requires: pip install playwright && playwright install chromium).
+fetch_backend: auto
+# cookie_file: cookies.txt
+
+user_agent: "Recourse-CA-Codes-Scraper/1.0 (+local research; contact: you@example.com)"
