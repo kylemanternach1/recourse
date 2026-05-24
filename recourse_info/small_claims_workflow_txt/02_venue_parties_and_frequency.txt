@@ -1,0 +1,114 @@
+Question Bank 02 - Venue, Correct Parties, and Party Verification
+
+AI instruction
+Use this bank to identify the correct county and correct legal names of all plaintiffs and defendants. Ask only the questions needed to complete venue and party verification. If the user already provided a fact in the narrative, confirm it only if it is legally important or ambiguous.
+
+Stage goal
+Select the likely filing county, verify party names, identify business/entity service targets, and determine whether extra party forms are needed.
+
+Model knowledge to apply when interpreting answers
+- Venue is about where the case may properly be filed. It is not always the county most convenient to the plaintiff.
+- Common venue anchors include where the defendant lives, where the defendant does business, where the agreement was made or was supposed to be performed, and where the injury or property damage occurred.
+- Consumer transactions can have special venue protections. If the dispute involves consumer goods or services, the AI should be careful before routing the case to a county selected only by the business.
+- Correct defendant identity matters for service, judgment, and collection. The AI should not treat a brand name, storefront name, app profile name, or nickname as sufficient if a legal entity can be verified.
+- For corporations and LLCs, the registered agent and entity name should be checked against official records before final service instructions.
+- For sole proprietors and DBAs, the person or legal entity behind the fictitious business name may matter.
+- If there are multiple defendants in different counties, the AI should explain why one county is still proper or why venue remains uncertain.
+- If the user cannot identify the defendant or an address for service, the case may be fileable in theory but not practically ready.
+
+Always extract first if available
+- plaintiff county
+- defendant county
+- location of transaction, accident, rental, work, or damage
+- contract signing location
+- business names shown on receipts/contracts
+- number of plaintiffs and defendants
+
+High-priority questions
+- What county do you live in?
+- What county does each defendant live in or do business in?
+- Where did the transaction, agreement, accident, rental, work, or damage happen?
+- Where was the agreement signed?
+- Where was the agreement supposed to be performed?
+- Is this a consumer purchase or consumer service dispute?
+- What is each defendant's full legal name?
+- Is any defendant a business?
+- What business name appears on the contract, receipt, invoice, estimate, website, or payment record?
+- Is there more than one plaintiff or more than one defendant?
+
+Conditional questions
+Ask if this is a consumer transaction:
+- Where did the consumer live when the agreement was made?
+- Where did the consumer sign the contract or accept the transaction?
+
+Ask if this is a rental/security deposit case:
+- What county is the rental property in?
+- Who owned or managed the property?
+- Is the defendant the landlord, property manager, owner, or a business entity?
+
+Ask if this is a car accident or property damage case:
+- What county did the incident happen in?
+- Does the defendant live in that county or somewhere else?
+
+Ask if any defendant is a business:
+- Do you know whether the business is an LLC, corporation, partnership, sole proprietorship, or fictitious business name?
+- Have you checked the California Secretary of State business search?
+- Do you know the registered agent for service of process?
+- Is the business using a DBA or fictitious business name?
+- Which exact name received payment from you?
+
+Ask if the legal name is uncertain:
+- What name appears on the payment record?
+- What name appears on the written agreement?
+- What name appears on advertising, invoices, or emails?
+- Do you have a physical address for the business?
+
+Ask if multiple parties exist:
+- Did all claims arise from the same transaction or event?
+- Should each defendant be responsible for the same amount, different amounts, or jointly responsible?
+- Do all plaintiffs have their own damages, or is one plaintiff the main claimant?
+
+Do not ask
+- Do not ask for service method yet unless needed to identify the correct party.
+- Do not ask for full hearing prep facts yet.
+
+Validation logic
+- Venue is usually based on defendant residence/business location, where the obligation was made/performed, or where damage occurred.
+- Consumer claims may have stricter venue rules.
+- The name on the judgment must match the correct legal defendant for service and enforcement.
+- Business defendants should be verified through official records where possible.
+- Additional parties may require SC-100A.
+
+Risk flags
+- venue_uncertain
+- wrong_county_possible
+- consumer_venue_restriction
+- defendant_legal_name_unverified
+- business_entity_type_unknown
+- registered_agent_missing
+- fictitious_business_name_issue
+- additional_parties_need_attachment
+
+Response behavior
+- If venue appears proper, state the county and the reason.
+- If multiple counties may work, list the strongest option and what fact would confirm it.
+- If defendant identity is uncertain, pause form generation and ask for records that identify the legal defendant.
+- If the user named the wrong likely party, explain gently that the court form should identify the legally responsible person/entity, not merely the customer-facing name.
+
+Data fields to populate
+- venue_county_selected
+- venue_basis
+- alternate_possible_counties
+- consumer_transaction_status
+- plaintiff_names
+- defendant_names
+- defendant_entity_types
+- business_record_status
+- registered_agent_information
+- fictitious_business_name_status
+- service_address_candidates
+- sc_100a_needed
+- party_verification_status
+
+Stage completion standard
+Stop asking venue and party questions when the AI can identify the likely filing county, explain the venue basis, and list the exact party names or the remaining verification gaps.

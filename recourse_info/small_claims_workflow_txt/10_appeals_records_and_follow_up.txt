@@ -1,0 +1,123 @@
+Question Bank 10 - Appeals, Records, Renewals, and Closure
+
+AI instruction
+Use this bank after judgment, dismissal, settlement, or appeal activity. Ask only questions needed to track appeal rights, preserve records, monitor payment, renew judgments, or close the case.
+
+Stage goal
+Protect deadlines and keep the case record complete through appeal, payment, renewal, or satisfaction.
+
+Model knowledge to apply when interpreting answers
+- Appeal rights in small claims are limited and depend on party role and whether the judgment was on the plaintiff's claim or a defendant's claim.
+- The appeal deadline usually runs from mailing of the Notice of Entry of Judgment, so the AI should ask for the SC-130 mailing date.
+- An appeal can delay enforcement and may result in a new hearing where evidence must be presented again.
+- Good recordkeeping matters for appeal, collection, satisfaction, credit disputes, and future renewal.
+- If the judgment remains unpaid, the user may need long-term tracking for interest, payments, enforcement costs, and renewal deadlines.
+- If the judgment is paid, the user should file satisfaction promptly and address any liens or collection actions.
+- The workflow should end with one of these statuses: closed satisfied, closed dismissed, appeal pending, collection pending, renewal monitoring, or not suitable for small claims.
+
+Always extract first if available
+- SC-130 mailing date
+- party role
+- judgment result
+- counterclaim status
+- appeal status
+- payment status
+- satisfaction status
+
+High-priority questions
+- Did you receive SC-130 Notice of Entry of Judgment?
+- What date was SC-130 mailed?
+- Were you the plaintiff, defendant, or both because of a counterclaim?
+- Are you considering an appeal?
+- Did the other side appeal?
+- Was there a counterclaim judgment?
+- Has the judgment been fully paid?
+- Do you need copies of filed forms, proofs of service, orders, exhibits, or judgment documents?
+
+Waiting-state questions
+- Are you waiting to see whether the other side appeals?
+- Are you waiting for an appeal hearing date?
+- Are you waiting for payments under a judgment or settlement?
+- Are you waiting for court copies, certified copies, or conformed documents?
+- Are you waiting for a lien release or satisfaction to be processed?
+- Do you need a future reminder before the judgment renewal deadline?
+
+Conditional questions
+Ask if user is considering appeal:
+- Are you appealing a claim you were allowed to appeal, or do you need help determining appeal rights?
+- What deadline appears to apply based on the SC-130 mailing date?
+- Do you need a checklist for SC-140 Notice of Appeal?
+
+Ask if the other side appealed:
+- Did you receive a notice of appeal?
+- What is the new hearing date, if any?
+- Do you still have all exhibits and witnesses available?
+
+Ask if there was a counterclaim:
+- Did the judgment involve the plaintiff's claim, the defendant's claim, or both?
+- Which party wants to appeal which part?
+
+Ask if judgment is unpaid:
+- Do you want payment reminders?
+- Do you want a renewal reminder before the judgment expires?
+- Are you tracking interest and enforcement costs?
+
+Ask if judgment is fully paid:
+- Has an Acknowledgment of Satisfaction of Judgment been filed?
+- Were any liens recorded that need release?
+- Do you need a final case closure packet?
+
+Ask if case records are incomplete:
+- Do you have the filed SC-100 and attachments?
+- Do you have proof of service?
+- Do you have fee waiver orders or receipts?
+- Do you have SC-130 or judgment documents?
+- Do you have enforcement documents, if any?
+
+Do not ask
+- Do not ask enforcement asset questions unless the judgment is unpaid and enforcement is being considered.
+- Do not ask initial eligibility questions unless the user is starting a new claim.
+
+Validation logic
+- Appeal deadlines usually run from mailing of SC-130.
+- Appeal rights differ depending on party role and whether a counterclaim was involved.
+- Appeal may delay enforcement.
+- Judgment records should be preserved for collection, appeal, credit correction, and proof of satisfaction.
+- Unpaid judgments may require renewal tracking.
+- Paid judgments require satisfaction filing.
+
+Risk flags
+- appeal_deadline_unclear
+- appeal_rights_uncertain
+- sc_130_missing
+- records_incomplete
+- renewal_deadline_needed
+- satisfaction_not_filed
+- lien_release_needed
+
+Response behavior
+- If appeal rights are unclear, ask party-role and counterclaim questions before giving an appeal path.
+- If no appeal is filed by the deadline, move the case to final/enforceable status.
+- If appeal is filed, preserve exhibits and prepare for a new hearing rather than collection.
+- If the case is paid, generate satisfaction and closure steps.
+- If the case remains unpaid, connect to the enforcement question bank and create renewal monitoring.
+
+Data fields to populate
+- sc_130_received
+- sc_130_mailing_date
+- party_role
+- counterclaim_status
+- appeal_deadline
+- appeal_status
+- sc_140_needed
+- final_judgment_date
+- payment_schedule
+- renewal_deadline
+- satisfaction_status
+- case_file_inventory
+- closure_status
+- post_judgment_wait_state
+- final_case_status
+
+Stage completion standard
+Stop asking appeal and follow-up questions when deadlines are tracked, the case file is complete, and the case is either in appeal, collection, renewal monitoring, or closed.

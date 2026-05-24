@@ -1,0 +1,113 @@
+Question Bank 01 - Eligibility, Monetary Limits, and Claim Type
+
+AI instruction
+Use this bank to decide whether small claims is the right forum. Do not ask every question. Ask only questions needed to resolve eligibility, amount limit, remedy type, filing-frequency, deadline, or government-claim issues.
+
+Stage goal
+Classify the matter as likely eligible, eligible only with corrections, needs legal/procedural review, or not appropriate for small claims.
+
+Model knowledge to apply when interpreting answers
+- California small claims is mainly for money judgments. If the user primarily wants an injunction, title decision, restraining order, eviction, probate outcome, divorce/family order, or declaratory ruling, the AI should explain that small claims may not provide that remedy.
+- A natural person generally has a higher small claims limit than a business/entity plaintiff. If the plaintiff is an LLC, corporation, partnership, association, or public entity, the AI should apply the lower entity limit.
+- If the user's damages exceed the applicable small claims limit, small claims may still be possible only if the user chooses to ask for no more than the limit and understands the practical consequence of waiving the excess.
+- The court usually cannot split one controversy into multiple small claims cases to avoid the limit.
+- Filing-frequency limits can block repeat high-value filings in the same calendar year.
+- Deadline analysis is not optional. The AI should flag old claims, identify the likely statute-of-limitations category, and avoid saying the case is safe if timing is uncertain.
+- Suing a government entity usually requires a written government claim before filing in court. If that prerequisite is missing, the AI should not proceed as though a normal SC-100 filing is ready.
+- A case can be procedurally eligible but weak on proof or collection. The AI should distinguish "can file" from "likely to win" and "likely to collect."
+- The AI should avoid guaranteeing an outcome. Use language like "likely eligible," "needs review," "potential issue," or "small claims may not be the right forum."
+
+Always extract first if available
+- plaintiff type
+- requested amount
+- remedy requested
+- claim category
+- key dates
+- government defendant status
+- number of prior filings over $2,500 this year
+
+High-priority questions
+- Are you filing as an individual, sole proprietor, corporation, LLC, partnership, association, public entity, or something else?
+- How much money are you asking the court to award?
+- Are you asking only for money, or do you need the court to order someone to do or stop doing something?
+- What kind of dispute is this? For example: security deposit, unpaid loan, car damage, contractor dispute, defective product, unpaid invoice, property damage, or government claim.
+- What date did the main event happen?
+- When did payment become due, or when did you discover the problem?
+- Have you filed any California small claims cases this calendar year for more than $2,500? If yes, how many?
+- Is the defendant a government agency, city, county, school district, public hospital, police department, or other public entity?
+
+Conditional questions
+Ask if plaintiff is not clearly an individual:
+- Is the plaintiff a business entity, such as an LLC or corporation, rather than you personally?
+- Is the business willing to reduce the claim to the small claims limit if needed?
+
+Ask if requested amount may exceed the applicable limit:
+- Do you want to waive the amount above the small claims limit so the case can stay in small claims?
+- Do you understand that if you waive the excess and judgment is entered, you generally cannot recover that waived amount later in another case?
+
+Ask if remedy is not purely money:
+- If the court could only award money, what dollar amount would compensate you?
+- Is your main goal money, or is your main goal an order requiring action?
+
+Ask if a government defendant is involved:
+- Did you submit a written government claim before trying to sue?
+- What date did you submit the government claim?
+- Did the agency reject it, accept it, ignore it, or partially pay it?
+- What date did you receive the agency's response?
+
+Ask if deadline risk is unclear:
+- Was the agreement written, oral, implied, or based on a receipt/invoice?
+- Was there a later written acknowledgment of the debt or promise to pay?
+- Has the defendant made any partial payment?
+
+Ask if plaintiff may be a minor:
+- Are you at least 18 years old?
+- If not, is an adult able to act for you in the case?
+
+Do not ask
+- Do not ask for county filing method yet unless eligibility depends on venue facts.
+- Do not ask for every item of evidence yet unless needed to classify the claim.
+
+Validation logic
+- Individual plaintiffs may use the individual small claims limit.
+- Entity plaintiffs usually have a lower small claims limit.
+- Claims must generally seek money only.
+- Filing-frequency limits apply to repeated claims above $2,500.
+- Government defendants usually require a pre-suit government claim.
+- Old claims should be flagged for statute of limitations risk.
+
+Risk flags
+- amount_exceeds_limit
+- non_money_remedy
+- government_claim_required
+- possible_statute_of_limitations_issue
+- repeated_filings_over_limit
+- plaintiff_is_minor
+- claim_type_not_suitable_for_small_claims
+
+Response behavior
+- If the case is likely eligible, explain why in one or two plain-language sentences and move to venue/party questions.
+- If the case is eligible only if corrected, name the correction clearly, such as reducing the amount, identifying a money remedy, or completing a government claim first.
+- If the case is likely not appropriate for small claims, explain the reason and suggest the next category of process without drafting small claims forms.
+- If the answer is ambiguous, ask the single question that would most affect eligibility.
+
+Data fields to populate
+- plaintiff_type
+- plaintiff_age_status
+- amount_requested
+- amount_over_limit
+- waiver_of_excess_possible
+- remedy_type
+- claim_category
+- event_date
+- payment_due_date
+- discovery_date
+- contract_type
+- government_defendant
+- government_claim_status
+- prior_filings_over_2500_this_year
+- eligibility_status
+- eligibility_risk_flags
+
+Stage completion standard
+Stop asking eligibility questions when the AI can state whether the case likely belongs in small claims, what risk flags exist, and what must be resolved before forms are generated.

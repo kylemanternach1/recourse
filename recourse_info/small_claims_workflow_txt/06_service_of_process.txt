@@ -1,0 +1,126 @@
+Question Bank 06 - Service of Process and Proof of Service
+
+AI instruction
+Use this bank after the user has a file-stamped claim. Ask only questions needed to choose a valid service method, track service attempts, and complete proof of service.
+
+Stage goal
+Ensure every defendant is properly served and proof of service is filed before the deadline.
+
+Model knowledge to apply when interpreting answers
+- Service gives the court power to proceed against the defendant. Without valid service, the court generally cannot enter judgment against that defendant.
+- The plaintiff cannot personally serve the papers. Service must be done by a qualified adult non-party or an authorized service provider.
+- The served papers should usually include the file-stamped SC-100 and related filed documents.
+- Service deadlines are tied to the hearing date and defendant location.
+- Service on a business is different from service on an individual. Corporations and LLCs usually require service on a registered agent or authorized person.
+- Government defendants may require special service rules.
+- Proof of service is not complete just because service happened. The proof form must be completed correctly and filed or brought according to court rules.
+- If service fails, the AI should help plan another attempt, check whether there is enough time, or explain that the user may need a continuance.
+- After service, there may be a waiting period before the hearing. The AI should shift the user to monitoring proof acceptance, possible defendant response/counterclaim, and hearing prep.
+
+Always extract first if available
+- defendant type
+- service address
+- registered agent
+- hearing date
+- service deadline
+- service method
+- proof of service status
+
+High-priority questions
+- Do you have a file-stamped copy of SC-100 to serve?
+- Is each defendant located in the same county as the court, another California county, another state, or unknown?
+- What address should be used to serve each defendant?
+- What type of defendant is this: individual, corporation, LLC, partnership, sole proprietor, government entity, or unknown business?
+- Who will serve the papers?
+- Has each defendant been successfully served?
+- What date, time, place, and method of service were used?
+- Has the proof of service been filed with the court?
+
+Waiting-state questions
+- Are you waiting for the sheriff, process server, or other server to report whether service succeeded?
+- Are you waiting for the court to process the proof of service?
+- Are you waiting to see whether the defendant contacts you, pays, settles, or files a counterclaim?
+- Has the court posted any update about service or hearing status?
+
+Conditional questions
+Ask if defendant is an individual:
+- Is this the defendant's home, work, or another reliable address?
+- Is personal service possible?
+
+Ask if defendant is a corporation or LLC:
+- Who is the registered agent for service of process?
+- Is the agent's address current?
+
+Ask if defendant is a government entity:
+- Which office, clerk, secretary, governing body, or official must be served?
+- Have you verified the government service requirements?
+
+Ask if using a friend or adult non-party:
+- Is the server at least 18?
+- Is the server not a plaintiff, defendant, or otherwise part of the case?
+- Can the server complete and sign the proof of service?
+
+Ask if using sheriff, process server, or clerk service:
+- Which agency or provider will perform service?
+- What fee is charged?
+- Do they need special instructions or copies?
+
+Ask if service failed:
+- What happened during the service attempt?
+- Is there another address?
+- Is there another authorized person who can be served?
+- Is there enough time to attempt service again before the deadline?
+
+Ask after service:
+- Did the server complete SC-104?
+- Does the proof list the correct defendant, date, time, place, and service method?
+- How will the proof be filed with the court?
+
+Do not ask
+- Do not ask for evidence or hearing argument unless service is complete or the hearing is near.
+- Do not ask post-judgment questions here.
+
+Validation logic
+- Plaintiff cannot personally serve the defendant.
+- Server must be an adult non-party.
+- Service deadlines depend on whether the defendant is in the filing county or outside it.
+- Corporations and LLCs should be served through registered agent or authorized person.
+- Government defendants may require special service.
+- Judgment may be delayed, continued, or impossible without valid proof of service.
+
+Risk flags
+- no_file_stamped_copy
+- plaintiff_attempting_service
+- server_not_qualified
+- service_address_uncertain
+- registered_agent_missing
+- government_service_rule_needed
+- service_failed
+- proof_of_service_missing
+- service_deadline_missed
+
+Response behavior
+- If service is not started, recommend a valid service method based on defendant type and deadline.
+- If service is pending, explain what confirmation is needed and when to check status.
+- If service failed, ask for the failure reason and suggest the next procedural option.
+- If service succeeded, move immediately to proof of service filing and then hearing preparation.
+- If the defendant responds informally, distinguish between settlement/payment and formal court filings such as SC-120.
+
+Data fields to populate
+- service_method_by_defendant
+- service_address_by_defendant
+- server_name
+- server_qualification
+- service_attempts
+- successful_service_date
+- proof_of_service_form
+- proof_of_service_filed
+- proof_filing_date
+- service_status
+- service_risk_flags
+- service_wait_state
+- defendant_response_status
+- counterclaim_possible
+
+Stage completion standard
+Stop asking service questions when every defendant has been served and proof of service has been filed or is ready to file before the deadline.

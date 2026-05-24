@@ -1,0 +1,123 @@
+Question Bank 08 - Hearing Attendance and Judgment Result
+
+AI instruction
+Use this bank on hearing day or after the hearing. Ask only questions needed to prepare final attendance reminders or capture the court's result and next deadline.
+
+Stage goal
+Record whether the case was heard, continued, dismissed, settled, defaulted, or reduced to judgment.
+
+Model knowledge to apply when interpreting answers
+- The hearing may not end with immediate payment. The court may rule at the hearing, mail a decision later, continue the case, dismiss it, or approve settlement.
+- If the defendant does not appear, the user does not automatically win unless service is valid and the judge accepts the proof.
+- If the case is continued, the user must understand what action is required before the new date.
+- If the case is dismissed without prejudice, the user may be able to fix the problem and refile or continue; if dismissed with prejudice, the issue is more serious.
+- SC-130 Notice of Entry of Judgment is important because it starts appeal and enforcement timing.
+- After judgment, there is usually a waiting period before enforcement. The AI should not move directly to garnishment or levy without checking deadlines and appeals.
+
+Always extract first if available
+- hearing date/time
+- court location or remote link
+- attendance status
+- defendant appearance
+- hearing result
+- judgment amount
+- SC-130 status
+
+Pre-hearing questions
+- What time is the hearing?
+- Is the hearing in person, remote, or hybrid?
+- Do you have the courthouse department or remote appearance link?
+- Do you have photo ID?
+- Do you have the filed claim, proof of service, exhibit packet, witness list, and hearing script?
+- Are your witnesses present or available?
+- Are you prepared to discuss settlement or mediation if offered?
+
+Post-hearing questions
+- Did you attend the hearing?
+- Did the defendant attend?
+- Did the judge hear the case, continue it, dismiss it, enter default, or approve a settlement?
+- If the case was continued, what is the new date and why was it continued?
+- If judgment was entered, who won?
+- What amount was awarded?
+- Were filing fees, service fees, or other costs awarded?
+- Did the judge order payment by a certain date or in installments?
+- Did you receive SC-130 Notice of Entry of Judgment?
+- If not, did the court say it would mail the decision?
+
+Waiting-state questions
+- Did the judge take the case under submission and say a decision would be mailed later?
+- Are you waiting for SC-130 Notice of Entry of Judgment?
+- Are you waiting to see whether the defendant appeals?
+- Are you waiting for the defendant to make voluntary payment?
+- Did the court set a future compliance, payment, or continued hearing date?
+
+Conditional questions
+Ask if defendant did not appear:
+- Was proof of service accepted by the court?
+- Did the court enter default judgment or require another step?
+
+Ask if case was dismissed:
+- Was the dismissal with prejudice or without prejudice?
+- What reason did the court give?
+- Can the issue be fixed by service, venue correction, better party naming, or refiling?
+
+Ask if case was continued:
+- What must be completed before the new hearing date?
+- Is new or corrected service required?
+- Did the court order exchange or submission of documents?
+
+Ask if settlement occurred:
+- Are the settlement terms written?
+- How much will be paid, by what date, and what happens if payment is missed?
+
+Ask if judgment entered:
+- What date was judgment entered or mailed?
+- What is the appeal or waiting-period deadline?
+
+Do not ask
+- Do not ask collection questions until it is clear the user won a money judgment and the waiting period is relevant.
+
+Validation logic
+- Default judgment depends on valid proof of service.
+- Dismissal reason determines whether refiling is possible.
+- SC-130 starts important post-judgment deadlines.
+- Enforcement usually waits until the appeal period expires.
+- Settlement terms should be written and specific.
+
+Risk flags
+- missed_hearing
+- proof_of_service_rejected
+- dismissal_reason_unclear
+- continuance_requirements_unclear
+- judgment_amount_unclear
+- sc_130_missing
+- settlement_terms_not_written
+
+Response behavior
+- If the result is unclear, ask for the exact wording on the minute order, SC-130, or court notice.
+- If the user won, explain the waiting period and payment/appeal monitoring before enforcement.
+- If the user lost, explain appeal availability cautiously based on party role and counterclaim status.
+- If the case was continued, generate a new task list tied to the continuation reason.
+- If settlement was reached, track payment dates and what happens if payment is missed.
+
+Data fields to populate
+- attendance_status
+- defendant_appearance_status
+- hearing_result
+- continuance_date
+- dismissal_type
+- dismissal_reason
+- judgment_winner
+- judgment_amount
+- costs_awarded
+- payment_terms
+- sc_130_received
+- sc_130_mailing_date
+- settlement_terms
+- next_deadline
+- decision_wait_state
+- voluntary_payment_wait_state
+- appeal_wait_state
+
+Stage completion standard
+Stop asking hearing-result questions when the AI can state what happened in court and what the user's next step and deadline are.

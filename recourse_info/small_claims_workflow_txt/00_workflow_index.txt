@@ -1,0 +1,137 @@
+California Small Claims Copilot - Adaptive Question Bank Index
+
+Purpose
+This folder contains adaptive question banks and procedural knowledge notes for a California small claims AI workflow. Each file represents one stage of the process, but the AI should not ask every question in order. The AI should choose only the questions needed based on information already provided by the user, extracted from documents, or inferred from earlier answers.
+
+These files are intended to help the model understand how the user's situation may play out procedurally. They include model knowledge, validation logic, risk flags, waiting states, and response behavior so the AI can explain whether small claims is applicable, what could go wrong, and what happens after filing.
+
+How the AI should use these files
+1. Start with the user's narrative and extract any facts already provided.
+2. Mark known fields as answered.
+3. Ask only the highest-value missing question at each turn.
+4. Prefer short, plain-language questions.
+5. Use conditional questions only when their trigger is present.
+6. Do not ask the user to repeat information already captured.
+7. Use the model knowledge sections to interpret the user's answers and explain likely procedural consequences.
+8. Track waiting states after filing, after service, after hearing, and after judgment.
+9. Stop asking questions for a stage once the completion standard is met.
+10. Before generating court forms or filing instructions, verify county-specific rules from official court sources.
+
+Question selection priority
+Ask questions in this order:
+1. Blocking eligibility issues
+2. Correct county and defendant identity
+3. Amount requested and damages proof
+4. Form fields required for SC-100 and attachments
+5. Filing method and hearing date
+6. Service deadline and proof of service
+7. Hearing preparation
+8. Judgment, collection, appeal, and closure
+
+Applicability classification
+At each major stage, the AI should classify the user's situation as one of:
+- likely_applicable_to_small_claims
+- applicable_if_corrected
+- needs_more_information
+- needs_county_rule_verification
+- likely_not_small_claims
+- blocked_pending_prerequisite
+
+Waiting-state handling
+The workflow must not stop at filing. After filing, the AI should track:
+- waiting for filing acceptance or rejection
+- waiting for fee waiver decision
+- waiting for file-stamped/conformed copies
+- waiting for service result
+- waiting for proof of service acceptance
+- waiting for defendant response, payment, settlement, or counterclaim
+- waiting for hearing date
+- waiting for mailed judgment or SC-130
+- waiting through appeal/enforcement period
+- waiting for payment, enforcement response, appeal, renewal, or satisfaction
+
+Core explanation pattern
+When responding to a user answer, the AI should usually provide:
+- what the answer means procedurally
+- whether it helps or hurts small claims applicability
+- what risk flag, if any, it creates
+- the next most important question or action
+
+Files
+01_eligibility_and_limits.txt
+Determines whether the claim fits small claims based on plaintiff type, amount, remedy, filing frequency, deadlines, and government-claim prerequisites.
+
+02_venue_parties_and_frequency.txt
+Determines the correct county, correct party names, business/entity details, and party attachments.
+
+03_evidence_and_damages.txt
+Builds the damages calculation, evidence index, witness list, and claim narrative.
+
+04_forms_packet.txt
+Collects only the fields needed to complete SC-100 and required companion forms.
+
+05_filing_and_hearing_date.txt
+Guides filing method, fee waiver, case number, hearing date, and deadline capture.
+
+06_service_of_process.txt
+Chooses service method, tracks service attempts, and prepares proof of service.
+
+07_hearing_preparation.txt
+Prepares exhibits, witnesses, hearing script, counterclaim response, and settlement options.
+
+08_attend_hearing_and_judgment.txt
+Captures hearing result, judgment, dismissal, continuance, default, or settlement.
+
+09_enforcement_if_you_win.txt
+Guides collection options after judgment if the user wins and payment is not made.
+
+10_appeals_records_and_follow_up.txt
+Tracks appeal deadlines, records, renewals, payment monitoring, and case closure.
+
+County-rule handling
+The AI should separate statewide rules from county-specific implementation details.
+
+Statewide data usually includes:
+- small claims limits
+- standard Judicial Council forms
+- basic service deadlines
+- general venue rules
+- general appeal and enforcement forms
+
+County-specific data may include:
+- filing methods
+- e-filing vendor
+- local forms
+- courthouse location
+- clerk service options
+- exhibit submission rules
+- remote hearing rules
+- self-help contact
+- proof of service filing preferences
+
+Core state object
+- plaintiff
+- defendants
+- claim_type
+- requested_amount
+- remedy_type
+- key_dates
+- venue_facts
+- county_selected
+- evidence
+- damages
+- forms_needed
+- filing_status
+- hearing_date
+- service_status
+- hearing_result
+- judgment_status
+- enforcement_status
+- appeal_status
+- risk_flags
+- missing_fields
+
+Completion standard for the whole workflow
+The workflow is complete when the user has either:
+- a clear reason small claims is not the right process, or
+- a completed small claims filing packet, filing instructions, service plan, hearing prep materials, and post-judgment guidance.

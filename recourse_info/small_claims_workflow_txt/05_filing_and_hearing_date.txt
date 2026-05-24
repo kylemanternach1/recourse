@@ -1,0 +1,113 @@
+Question Bank 05 - Filing, Fees, and Hearing Date
+
+AI instruction
+Use this bank after the form packet is ready. Ask only questions needed to select a filing method, estimate fees, track acceptance or rejection, and capture the hearing date.
+
+Stage goal
+Get the claim filed in the correct county and record the case number, hearing date, and service deadlines.
+
+Model knowledge to apply when interpreting answers
+- Filing starts the court case, but it does not mean the defendant has been notified. Service is a separate required step.
+- Counties vary in filing methods. Some allow e-filing, mail, drop box, fax, or in-person filing; the AI must verify local rules before giving final instructions.
+- After filing, the clerk should return a file-stamped/conformed copy with a case number and hearing information. That file-stamped version is what gets served.
+- Filing fees depend on the claim amount and sometimes the filer history. Fee waivers may be available for eligible users.
+- If filing is rejected or returned, the AI should treat the rejection reason as the next workflow input and route the user back to the missing/corrected item.
+- After the hearing date is assigned, the AI must calculate service deadlines and explain that missing service deadlines can cause continuance, dismissal, or inability to get judgment.
+- The user may wait after filing for court acceptance, conformed copies, fee waiver decisions, or hearing notices. The AI should track each wait state.
+
+Always extract first if available
+- selected county
+- filing method preference
+- fee waiver status
+- case number
+- hearing date
+- rejection reason
+
+High-priority questions
+- Which county are you filing in?
+- Do you want to file in person, by mail, drop box, fax, or e-filing if available?
+- Are you requesting a fee waiver?
+- Has the court accepted the filing?
+- What case number did the court assign?
+- What is the hearing date and time?
+- What courthouse, department, or remote hearing information did the court provide?
+- Did you receive a file-stamped copy of SC-100?
+
+Waiting-state questions
+- Are you still waiting for the court to accept or reject the filing?
+- Are you still waiting for a conformed/file-stamped copy?
+- Are you still waiting for the fee waiver decision?
+- Are you still waiting for the hearing notice?
+- Did the court give any deadline to fix a filing defect or pay a fee?
+
+Conditional questions
+Ask if filing by mail:
+- Do you have the original, required copies, and return envelope if the court requires one?
+- What mailing address does the county court use for small claims filings?
+
+Ask if filing electronically:
+- Which e-filing portal does the county use?
+- Are all documents saved as separate PDFs if required?
+- Did the e-filing system return, reject, or accept the filing?
+
+Ask if fee waiver requested:
+- Did the court grant, deny, or defer the fee waiver?
+- Did you receive an order on the fee waiver?
+- If denied, what payment deadline did the court give?
+
+Ask if filing was rejected or returned:
+- What exact reason did the clerk or e-filing system give?
+- Which form, attachment, fee, signature, or venue issue needs correction?
+
+Ask once hearing date is known:
+- Is each defendant in the filing county or outside the filing county?
+- Based on defendant location, what is the last safe date for service?
+
+Do not ask
+- Do not ask service-method details until a file-stamped claim exists.
+- Do not ask hearing preparation questions until hearing date and service status are known.
+
+Validation logic
+- Filing county must match the venue analysis.
+- Filing method must be accepted by the county.
+- Filing fee should match the claim amount and filer history.
+- Fee waiver status must be tracked separately.
+- The file-stamped SC-100 is the version to serve.
+- Service deadlines must be calculated immediately after hearing date is known.
+
+Risk flags
+- county_filing_method_unverified
+- filing_rejected
+- fee_waiver_denied
+- case_number_missing
+- hearing_date_missing
+- file_stamped_copy_missing
+- service_deadline_approaching
+
+Response behavior
+- If filing has not happened, provide county-specific filing options and what to submit.
+- If filing is pending, explain what the user is waiting for and what status to check.
+- If filing was rejected, identify the correction path and route back to the relevant question bank.
+- If filing was accepted, congratulate briefly, then immediately move to service deadlines and service planning.
+
+Data fields to populate
+- filing_county
+- filing_method
+- filing_fee_estimate
+- fee_waiver_requested
+- fee_waiver_status
+- filing_status
+- rejection_reason
+- case_number
+- file_stamped_sc_100_received
+- hearing_date
+- hearing_time
+- hearing_department
+- courthouse_or_remote_info
+- service_deadlines
+- filing_wait_state
+- correction_deadline
+- court_status_check_method
+
+Stage completion standard
+Stop asking filing questions when the filing is accepted, the hearing date is known, and the user has a file-stamped copy ready for service.

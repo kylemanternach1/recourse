@@ -1,0 +1,121 @@
+Question Bank 07 - Hearing Preparation
+
+AI instruction
+Use this bank once the hearing date is known and service is complete or in progress. Ask only questions needed to prepare exhibits, witnesses, script, defenses, counterclaims, and settlement options.
+
+Stage goal
+Create a clear hearing packet and presentation plan.
+
+Model knowledge to apply when interpreting answers
+- Small claims hearings are informal compared with regular civil trials, but the user still needs proof, organization, and a clear request.
+- The judge may have limited time. The user's presentation should be chronological, concise, and tied to documents.
+- The user should be prepared for three outcomes: judgment, continuance, or dismissal. Settlement or mediation may also happen before or at the hearing.
+- The defendant may appear, fail to appear, dispute service, raise defenses, or file a Defendant's Claim/counterclaim.
+- The AI should prepare the user to answer likely defenses rather than only presenting the plaintiff's story.
+- County rules may control remote appearances, exhibit upload, exhibit exchange, or paper copies. These must be verified.
+- After filing and service, the user may be waiting for the hearing, a defendant response, a counterclaim, settlement contact, or court instructions. The AI should track those waiting states and remind the user what to monitor.
+
+Always extract first if available
+- hearing date and mode
+- proof of service status
+- exhibit list
+- witness list
+- expected defenses
+- counterclaim status
+- settlement interest
+
+High-priority questions
+- Has each defendant been served?
+- Has proof of service been filed?
+- What are the three to five most important facts the judge needs to understand?
+- Which exhibit proves each important fact?
+- Do you have copies of each exhibit for the judge, yourself, and the defendant, or whatever your county requires?
+- Are your texts, emails, photos, receipts, estimates, and invoices organized and readable?
+- Do any witnesses need to attend?
+- What defenses do you expect the defendant to raise?
+- Is the hearing in person, remote, or hybrid?
+- Has the defendant filed a Defendant's Claim, SC-120?
+
+Waiting-state questions
+- Are you waiting for the hearing date to arrive?
+- Has the defendant contacted you to settle, pay, or dispute the claim?
+- Have you received any new paperwork from the defendant or court?
+- Has the court sent remote hearing instructions or exhibit instructions?
+- Are you waiting on a witness, document, subpoena, or repair estimate?
+
+Conditional questions
+Ask if proof of service is not complete:
+- What remains to complete service?
+- Is there enough time before the hearing deadline?
+
+Ask if witnesses are needed:
+- What does each witness know from personal experience?
+- Is any witness unwilling or unable to attend voluntarily?
+- Do you need a subpoena for a witness or documents?
+
+Ask if defendant filed a counterclaim:
+- What is the defendant asking for?
+- What facts and evidence respond to the defendant's claim?
+- Are there documents that disprove or reduce the counterclaim?
+
+Ask if remote hearing:
+- Does the county require evidence upload before the hearing?
+- Do you have a working device, camera, microphone, internet connection, and quiet location?
+- Did the court provide a remote link or instructions?
+
+Ask if settlement is possible:
+- What amount would you accept to settle before the hearing?
+- Would payment over time be acceptable?
+- Do you want proposed settlement terms prepared in writing?
+
+Ask if exhibits are messy:
+- Should we organize exhibits chronologically or by issue?
+- Which documents are duplicates, irrelevant, or confusing?
+
+Do not ask
+- Do not ask enforcement questions before judgment.
+- Do not re-open eligibility unless a new fact creates a serious issue.
+
+Validation logic
+- Hearing script amount must match SC-100 and damages sheet.
+- Evidence should be tied to key facts.
+- Witnesses should have first-hand knowledge.
+- Subpoenas require lead time.
+- County exhibit and remote-hearing rules must be verified.
+- Counterclaims require a separate response plan.
+
+Risk flags
+- service_not_complete
+- exhibit_packet_incomplete
+- evidence_not_readable
+- witness_unavailable
+- subpoena_needed
+- county_exhibit_rule_unverified
+- counterclaim_unprepared
+- remote_hearing_logistics_missing
+
+Response behavior
+- If the user is simply waiting for the hearing, provide a preparation timeline rather than asking unnecessary intake questions.
+- If defendant contacts the user, help classify it as settlement, informal dispute, payment, or formal court response.
+- If a counterclaim arrives, switch to preparing both claim and defense.
+- If new evidence appears, update the exhibit index and damages/hearing script as needed.
+- If local hearing rules are unknown, prompt county-rule verification before final hearing packet.
+
+Data fields to populate
+- proof_of_service_ready
+- hearing_mode
+- exhibit_list
+- exhibit_copy_status
+- witness_attendance_status
+- subpoena_needed
+- expected_defenses
+- counterclaim_status
+- settlement_position
+- hearing_script
+- county_hearing_rules
+- waiting_for_hearing_status
+- defendant_contact_log
+- court_notice_log
+
+Stage completion standard
+Stop asking hearing-prep questions when the user has an organized exhibit packet, witness plan, defense/counterclaim response, and concise hearing script.

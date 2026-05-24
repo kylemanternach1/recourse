@@ -1,0 +1,118 @@
+Question Bank 03 - Evidence and Damages
+
+AI instruction
+Use this bank to calculate the exact amount requested and connect each key fact to evidence. Ask only questions needed to complete the damages computation, evidence index, witness list, and claim narrative.
+
+Stage goal
+Produce a precise amount for SC-100, a damages computation sheet, evidence checklist, and concise factual claim narrative.
+
+Model knowledge to apply when interpreting answers
+- The plaintiff has the burden to prove the claim by showing it is more likely than not that the defendant is responsible and that the requested amount is supported.
+- The damages number on SC-100 should match the computation sheet. If the user gives a range or rough guess, the AI should ask for itemized numbers.
+- Good evidence usually includes dated documents, communications, payment records, photos, repair estimates, receipts, and witness testimony based on personal knowledge.
+- The AI should connect evidence to claim elements: what was promised, what happened, why the defendant is responsible, and how the amount was calculated.
+- Unsupported frustration, inconvenience, or emotional harm should not be treated as automatically recoverable. The AI should ask what specific money loss resulted.
+- Insurance payments, refunds, chargebacks, partial payments, or offsets may reduce the amount to request.
+- If damages exceed the applicable small claims limit, the AI must route back to the waiver/limit decision.
+- Evidence strength affects likely court outcome. The AI can say a case appears evidence-supported, evidence-thin, or needs more proof, but should not promise a win.
+
+Always extract first if available
+- amount requested
+- damages components
+- contracts, receipts, invoices, photos, messages, estimates
+- key dates
+- admissions by defendant
+- witness names
+
+High-priority questions
+- What exact dollar amount are you asking for?
+- Please break that total into separate items. What is each amount for?
+- What document, receipt, estimate, photo, or message supports each amount?
+- What are the most important facts you need to prove?
+- What evidence do you have for each important fact?
+- Do you have a written contract, lease, invoice, estimate, receipt, or payment record?
+- Do you have texts, emails, letters, or voicemails from the defendant?
+- Do you have photos or videos? What do they show?
+- Do you have witnesses with first-hand knowledge?
+
+Conditional questions
+Ask if damages are property damage:
+- Do you have repair estimates, repair receipts, replacement receipts, or photos?
+- Has insurance paid any part of the loss?
+- Are you claiming a deductible, rental cost, towing, or uncovered repair amount?
+
+Ask if damages are a security deposit:
+- What was the deposit amount?
+- What date did you move out?
+- Did you provide a forwarding address?
+- Did the landlord send an itemized deduction statement?
+- Do you have move-in and move-out photos?
+- Did you request the deposit back in writing?
+
+Ask if damages are unpaid loan or unpaid invoice:
+- What date was the money due?
+- Was repayment agreed in writing, by text, orally, or by invoice terms?
+- Did the defendant acknowledge the debt after it became due?
+- Were any partial payments made?
+
+Ask if damages are contractor or service dispute:
+- What work was promised?
+- What work was completed?
+- What work was defective or unfinished?
+- Did you pay a deposit or progress payment?
+- Do you have estimates to repair or complete the work?
+
+Ask if damages exceed the small claims limit:
+- What amount, if any, are you willing to waive to stay in small claims?
+- Should the court form request the full amount or only the small claims amount?
+
+Ask if evidence is digital:
+- Can the messages or photos be printed or exported with dates visible?
+- Do the screenshots show who sent each message and when?
+
+Ask if collectability matters:
+- Do you know whether the defendant works, owns property, operates a business, or has assets?
+- Is there any reason you think collecting a judgment would be difficult?
+
+Do not ask
+- Do not ask for filing method here.
+- Do not ask for hearing logistics unless evidence submission rules are already relevant.
+
+Validation logic
+- The damages total must match the amount entered on SC-100.
+- Each damages item should have supporting evidence or a clear explanation.
+- Future, speculative, or unsupported amounts should be flagged.
+- Insurance payments or offsets may affect the amount requested.
+- Evidence should be organized by issue or chronology.
+
+Risk flags
+- damages_total_unclear
+- unsupported_amount
+- amount_mismatch
+- speculative_damages
+- evidence_missing
+- witness_needed
+- insurance_offset_possible
+- collectability_concern
+
+Response behavior
+- If evidence is strong, summarize the strongest proof and move toward forms.
+- If evidence is incomplete, tell the user exactly what evidence would fill the gap.
+- If the requested amount is unsupported, ask for receipts, estimates, payment proof, or a simpler calculation.
+- If the user has no documents, ask whether witnesses, admissions, photos, bank records, or messages can support the claim.
+
+Data fields to populate
+- damages_items
+- damages_total
+- amount_to_request_on_sc_100
+- amount_waived_if_any
+- evidence_items
+- evidence_by_claim_element
+- witness_list
+- admissions_by_defendant
+- evidence_gaps
+- collectability_notes
+- claim_narrative_draft
+
+Stage completion standard
+Stop asking evidence and damages questions when the AI has a precise requested amount, a support source for each major damages item, and enough facts to draft the SC-100 claim narrative.

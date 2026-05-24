@@ -1,0 +1,132 @@
+Question Bank 09 - Enforcement if the User Wins
+
+AI instruction
+Use this bank only if the user won a money judgment or is trying to collect an existing small claims judgment. Ask only questions needed to determine whether enforcement can begin and which collection path is practical.
+
+Stage goal
+Track payment, waiting period, debtor assets, and collection options.
+
+Model knowledge to apply when interpreting answers
+- A judgment is a legal right to collect; it is not automatic payment.
+- The user usually must wait through the appeal/enforcement waiting period before using involuntary collection tools.
+- The defendant may pay voluntarily, request payments, appeal, ignore the judgment, file bankruptcy, or claim exemptions.
+- The AI should maintain a payment ledger and update the remaining balance after every payment.
+- Collection strategy depends on what the user knows about the debtor's job, bank, business, property, or assets.
+- Writs, wage garnishment, bank levy, debtor examinations, and property liens are different tools with different forms and county procedures.
+- Enforcement costs may be recoverable, but the user should understand that collection can take time and money.
+- If the judgment is paid, the workflow must shift to satisfaction of judgment rather than more collection.
+
+Always extract first if available
+- judgment amount
+- notice of entry date
+- payment status
+- debtor asset information
+- appeal status
+- enforcement method preference
+
+High-priority questions
+- Did you win a money judgment?
+- What amount did the court award?
+- What date was the Notice of Entry of Judgment mailed or received?
+- Has the defendant paid anything?
+- Has the 30-day appeal or waiting period passed?
+- Did the defendant appeal?
+- Did the defendant provide a Judgment Debtor's Statement of Assets, SC-133?
+- Do you know where the defendant works?
+- Do you know where the defendant banks?
+- Does the defendant own real property?
+- Has the defendant filed bankruptcy or claimed they cannot pay?
+
+Waiting-state questions
+- Are you still within the 30-day appeal or waiting period?
+- Are you waiting for the defendant to make voluntary payment?
+- Are you waiting for an installment payment?
+- Are you waiting for SC-133 Judgment Debtor's Statement of Assets?
+- Are you waiting for the sheriff, levying officer, employer, or bank to process an enforcement request?
+- Are you waiting for the court to schedule a debtor examination?
+
+Conditional questions
+Ask if waiting period has not passed:
+- Do you want to prepare a voluntary payment request while waiting?
+- What date should enforcement options be revisited?
+
+Ask if partial payments were made:
+- What amount was paid and on what date?
+- Was there a written payment agreement?
+- What balance remains?
+
+Ask if SC-133 was not provided:
+- Do you want to consider a debtor examination?
+- Do you have a current address where the debtor can be served?
+
+Ask if wage garnishment is possible:
+- What is the debtor's employer name and address?
+- Is the debtor an employee rather than self-employed?
+
+Ask if bank levy is possible:
+- Do you know the bank or branch where the debtor holds funds?
+- Do you have enough identifying information for the levy?
+
+Ask if real property lien is possible:
+- What county is the property in?
+- Do you want to record an abstract of judgment?
+
+Ask if judgment is fully paid:
+- Do you need to file an Acknowledgment of Satisfaction of Judgment?
+- Were any liens, levies, or garnishments started that need release?
+
+Ask if bankruptcy is mentioned:
+- What bankruptcy court notice did you receive?
+- Has collection been stayed?
+
+Do not ask
+- Do not ask appeal-prep questions unless an appeal has been filed.
+- Do not ask new case intake questions unless enforcing this judgment is impossible.
+
+Validation logic
+- Enforcement usually begins after the appeal/waiting period.
+- Payments reduce the collectible balance.
+- Collection tools require accurate debtor information.
+- Writs, garnishments, levies, liens, and debtor exams use different forms.
+- Bankruptcy may pause collection.
+- Satisfaction must be filed when judgment is paid.
+
+Risk flags
+- enforcement_too_early
+- appeal_pending
+- debtor_assets_unknown
+- bankruptcy_flag
+- payment_ledger_missing
+- satisfaction_required
+- collection_costs_may_exceed_recovery
+
+Response behavior
+- If enforcement is too early, give the date when the user should revisit enforcement.
+- If payment is partial or promised, update the ledger and set the next payment checkpoint.
+- If the debtor ignores the judgment, recommend the least complex viable enforcement path based on available asset information.
+- If asset information is missing, ask only the questions needed to pick between debtor exam, wage garnishment, bank levy, or lien.
+- If bankruptcy is mentioned, tell the user collection may be stayed and mark the case for legal review.
+
+Data fields to populate
+- judgment_amount
+- judgment_date
+- sc_130_mailing_date
+- enforceable_date
+- appeal_status
+- payments_received
+- remaining_balance
+- debtor_asset_info
+- sc_133_status
+- enforcement_method_selected
+- writ_status
+- garnishment_status
+- levy_status
+- lien_status
+- bankruptcy_flag
+- satisfaction_needed
+- enforcement_wait_state
+- payment_ledger
+- next_collection_check_date
+
+Stage completion standard
+Stop asking enforcement questions when the AI can recommend a practical collection path, explain what information is missing, or confirm that collection should pause or close.
