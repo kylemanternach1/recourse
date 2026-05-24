@@ -10,6 +10,13 @@ export interface EditFileResult {
   mode: 'search_replace' | 'write'
   replacements?: number
   bytesWritten: number
+  isNewFile?: boolean
+  /** Previous file body before a write (for UI diff). */
+  previousContent?: string
+  /** Text removed or replaced (patch or full previous file). */
+  oldText?: string
+  /** Text added or the new file body. */
+  newText?: string
 }
 
 export async function editFile(
@@ -33,9 +40,30 @@ export async function editFile(
     if (bytes > MAX_WRITE_BYTES) {
       throw new Error(`content exceeds max write size (${MAX_WRITE_BYTES} bytes)`)
     }
+    let isNewFile = false
+    let previousContent: string | undefined
+    try {
+      previousContent = await fs.readFile(absolutePath, 'utf8')
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code === 'ENOENT') {
+        isNewFile = true
+      } else {
+        throw error
+      }
+    }
+
     await fs.mkdir(path.dirname(absolutePath), { recursive: true })
     await fs.writeFile(absolutePath, options.content, 'utf8')
-    return { path: normalized, mode: 'write', bytesWritten: bytes }
+    return {
+      path: normalized,
+      mode: 'write',
+      bytesWritten: bytes,
+      isNewFile,
+      previousContent,
+      oldText: previousContent,
+      newText: options.content
+    }
   }
 
   if (options.old_string == null || options.new_string == null) {
@@ -82,7 +110,9 @@ export async function editFile(
     path: normalized,
     mode: 'search_replace',
     replacements: options.replace_all ? occurrences : 1,
-    bytesWritten: bytes
+    bytesWritten: bytes,
+    oldText: options.old_string,
+    newText: options.new_string
   }
 }
 

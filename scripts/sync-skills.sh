@@ -19,7 +19,7 @@ SKILLS_REPO_REF="${RECOURSE_SKILLS_REPO_REF:-main}"
 DOC_SKILLS=(pdf docx pptx xlsx)
 
 SKILLS_DEST="$REPO_ROOT/resources/skills"
-STATUTES_DEST="$REPO_ROOT/resources/statutes/ca"
+STATUTES_DEST="$REPO_ROOT/resources/ca/statutes"
 STATUTES_REPO_URL="${RECOURSE_STATUTES_REPO_URL:-https://github.com/johnakelly-yahoo-com/california-codes.git}"
 STATUTES_REPO_REF="${RECOURSE_STATUTES_REPO_REF:-main}"
 RUNTIME_DIR="$REPO_ROOT/.recourse-runtime"

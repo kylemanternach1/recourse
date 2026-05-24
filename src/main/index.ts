@@ -1,9 +1,9 @@
+import { promises as fs } from 'node:fs'
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
 import type {
-  ApprovalDecision,
   CreateCaseRequest,
   SendMessageRequest,
   SmallClaimsIntake
@@ -24,8 +24,13 @@ import { SandboxRunner } from './sandbox/sandboxRunner'
 import { SkillCatalog } from './skills/skillCatalog'
 import { SkillSeeder } from './skills/skillSeeder'
 import { ToolsDoctor } from './skills/toolsDoctor'
-import { isCorpusReady, resolveStatutesCorpusDir } from './statutes/statuteMount'
+import {
+  isCourtFormsReady,
+  isStatutesReady,
+  resolveCaResourcesDir
+} from './resources/caResources'
 import { WorkspaceManager } from './workspaces/workspaceManager'
+import { resolveWorkspaceFilePath } from './workspaces/workspacePaths'
 
 let mainWindow: BrowserWindow | undefined
 let agentCore: AgentCore | undefined
@@ -68,7 +73,7 @@ function bootstrap(): void {
   const workspaceManager = new WorkspaceManager(path.join(app.getPath('userData'), 'workspaces'))
   const skillCatalog = new SkillCatalog(resourcesRoot)
   const skillSeeder = new SkillSeeder(skillCatalog)
-  const statutesCorpusDir = resolveStatutesCorpusDir(
+  const caResourcesDir = resolveCaResourcesDir(
     app.getAppPath(),
     app.isPackaged,
     app.getPath('userData')
@@ -77,11 +82,11 @@ function bootstrap(): void {
     path.join(app.getPath('userData'), 'cases.json'),
     workspaceManager,
     skillSeeder,
-    statutesCorpusDir
+    caResourcesDir
   )
   uploadManager = new UploadManager(caseStore)
   chatService = new ChatService(caseStore)
-  toolsDoctor = new ToolsDoctor(resourcesRoot, statutesCorpusDir)
+  toolsDoctor = new ToolsDoctor(resourcesRoot, caResourcesDir)
   const llmProvider = new OpenAICompatibleProvider()
   if (!llmProvider.isConfigured()) {
     console.warn(
@@ -90,10 +95,17 @@ function bootstrap(): void {
   } else {
     console.log('[recourse] LLM provider configured.')
   }
-  void isCorpusReady(statutesCorpusDir).then((ready) => {
+  void isStatutesReady(caResourcesDir).then((ready) => {
     if (!ready) {
       console.warn(
         '[recourse] CA statute corpus not installed. Run ./scripts/sync-skills.sh --statutes'
+      )
+    }
+  })
+  void isCourtFormsReady(caResourcesDir).then((ready) => {
+    if (!ready) {
+      console.warn(
+        `[recourse] CA court forms missing at ${caResourcesDir}/court_forms — they will not be mounted.`
       )
     }
   })
@@ -101,7 +113,7 @@ function bootstrap(): void {
     caseStore,
     new SandboxRunner(),
     llmProvider,
-    statutesCorpusDir,
+    caResourcesDir,
     (event) => mainWindow?.webContents.send('agent:event', event)
   )
 }
@@ -208,6 +220,56 @@ ipcMain.handle('case:open-workspace', async (_, caseId: string) => {
   return true
 })
 
+ipcMain.handle(
+  'workspace:save-download',
+  async (_, caseId: string, relativePath: string, suggestedName?: string) => {
+    if (!caseStore) {
+      throw new Error('Case store not ready.')
+    }
+    if (!mainWindow) {
+      throw new Error('Main window not ready.')
+    }
+    const record = await caseStore.get(caseId)
+    if (!record) {
+      throw new Error(`Unknown case: ${caseId}`)
+    }
+    const absolutePath = resolveWorkspaceFilePath(record.workspace.path, relativePath)
+    const stat = await fs.stat(absolutePath)
+    if (!stat.isFile()) {
+      throw new Error(`${relativePath} is not a file`)
+    }
+
+    const defaultName = suggestedName?.trim() || path.basename(relativePath)
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Save file',
+      defaultPath: defaultName,
+      buttonLabel: 'Save'
+    })
+    if (result.canceled || !result.filePath) {
+      return { saved: false as const }
+    }
+
+    await fs.copyFile(absolutePath, result.filePath)
+    return { saved: true as const, path: result.filePath }
+  }
+)
+
+ipcMain.handle('workspace:open-file', async (_, caseId: string, relativePath: string) => {
+  if (!caseStore) {
+    throw new Error('Case store not ready.')
+  }
+  const record = await caseStore.get(caseId)
+  if (!record) {
+    throw new Error(`Unknown case: ${caseId}`)
+  }
+  const absolutePath = resolveWorkspaceFilePath(record.workspace.path, relativePath)
+  const result = await shell.openPath(absolutePath)
+  if (result.length > 0) {
+    throw new Error(result)
+  }
+  return absolutePath
+})
+
 ipcMain.handle('case:select-uploads', async () => {
   if (!uploadManager) {
     throw new Error('Upload manager not ready.')
@@ -250,9 +312,3 @@ ipcMain.handle('agent:send-message', async (_, request: SendMessageRequest) => {
   await agentCore.sendMessage(request)
 })
 
-ipcMain.handle('agent:decide-proposal', async (_, decision: ApprovalDecision) => {
-  if (!agentCore) {
-    throw new Error('Agent core is not ready.')
-  }
-  await agentCore.decideProposal(decision)
-})

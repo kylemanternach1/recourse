@@ -1,22 +1,47 @@
 # Skill: California Small Claims (SC-100)
 
-Use this skill when the plaintiff wants to file a small claims case in California using form **SC-100**.
+Orchestrates the full small-claims lifecycle. Read this index, then open the **phase checklist** for the case's current phase.
 
-## What this skill provides
+## Phase checklists
 
-- `sc-100-intake.md` — questions to collect from the plaintiff before drafting.
-- `filing-guide.md` — step-by-step filing checklist and venue rules.
-- `damages-worksheet.md` — itemized damages calculation worksheet.
+| Phase | File |
+|-------|------|
+| 00 Intake | [sc-100-intake.md](sc-100-intake.md) |
+| 01 Eligibility | [phase-01-eligibility.md](phase-01-eligibility.md) |
+| 02 Venue & parties | [phase-02-parties-venue.md](phase-02-parties-venue.md) |
+| 03 Evidence & damages | [damages-worksheet.md](damages-worksheet.md) |
+| 04 Forms packet | [phase-04-forms.md](phase-04-forms.md) |
+| 05 Filing | [phase-05-filing.md](phase-05-filing.md) + [filing-guide.md](filing-guide.md) |
+| 06 Service | [phase-06-service.md](phase-06-service.md) |
+| 07 Hearing prep | [phase-07-hearing-prep.md](phase-07-hearing-prep.md) |
+| 08 Hearing & judgment | [phase-08-hearing.md](phase-08-hearing.md) |
+| 09 Enforcement | [phase-09-enforcement.md](phase-09-enforcement.md) |
+| 10 Closure | [phase-10-closure.md](phase-10-closure.md) |
 
-## How the agent should use this skill
+## Deep reference
 
-1. Read `sc-100-intake.md` and ask the plaintiff each question in turn, writing answers into the case workspace as `intake.md`.
-2. Once intake is complete, populate `sc-100-draft.md` with the plaintiff's responses laid out in SC-100 section order.
-3. Use `damages-worksheet.md` to compute the total demand. The SC-100 limit for individuals is $12,500.
-4. Reference `filing-guide.md` for filing fees, venue rules, and required copies.
+- Workflow playbooks: `ca/small_claims_workflow/` (one file per phase)
+- Official PDFs: `ca/court_forms/` (sc100.pdf, sc104.pdf, etc.)
+- Statutes: `ca/statutes/` (search with `rg -n`)
 
-## Important guardrails
+## Standard draft files
 
-- Do **not** invent facts the plaintiff did not provide.
-- Do **not** give specific legal advice. Frame guidance as procedural help.
-- Always write outputs into files inside the workspace; never read or write outside it.
+| File | Purpose |
+|------|---------|
+| `draft/damages.md` | Itemized damages |
+| `draft/forms/sc100-filled.pdf` | Filled official SC-100 PDF |
+| `draft/sc100-field-map.md` | SC-100 field worksheet / verification map |
+| `draft/forms/sc100a-filled.pdf` | Additional plaintiffs/defendants, if needed |
+| `draft/forms/sc103-filled.pdf` | Fictitious business name, if needed |
+| `draft/forms/fw001-filled.pdf` | Fee waiver request, if needed |
+| `draft/sc104.md` | Proof of service worksheet |
+| `draft/exhibit-index.md` | Hearing exhibits |
+| `draft/hearing-script.md` | What to say at hearing |
+| `draft/post-judgment-plan.md` | Collection plan |
+
+## Guardrails
+
+- Do not invent facts. Use `update_case_state` when facts or phase status change.
+- Do not edit files under `ca/`. Write drafts under `draft/`.
+- For Judicial Council forms, copy and fill official PDFs under `draft/forms/`; markdown worksheets do not substitute for the filed form.
+- This is procedural guidance, not legal advice.

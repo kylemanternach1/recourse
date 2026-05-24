@@ -8,6 +8,8 @@ export interface ReadFileRangeResult {
   startLine: number
   endLine: number
   totalLines: number
+  /** Raw lines in the requested range (no line-number prefix). */
+  lines: string[]
   content: string
   truncated: boolean
 }
@@ -40,6 +42,7 @@ export async function readFileRange(
     startLine: start,
     endLine: Math.min(end, totalLines),
     totalLines,
+    lines: slice,
     content: numbered,
     truncated
   }

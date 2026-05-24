@@ -1,12 +1,27 @@
 import type { PersistedChatUi } from '../../shared/contracts'
+import { normalizeChatMessages } from './chatNormalize'
 
 export const WELCOME_MESSAGE_ID = 'welcome'
 
 export interface ChatMessage {
   id: string
-  role: 'user' | 'assistant' | 'system' | 'tool-use'
+  role:
+    | 'user'
+    | 'assistant'
+    | 'system'
+    | 'tool-use'
+    | 'file-download'
+    | 'command-run'
+    | 'phase-update'
+    | 'file-read'
+    | 'file-edit'
   content: string
   proposal?: import('../../shared/contracts').CommandProposal
+  fileOffer?: import('../../shared/contracts').FileOffer
+  commandRun?: import('../../shared/contracts').CommandRun
+  phaseUpdate?: import('../../shared/contracts').PhaseUpdate
+  fileRead?: import('../../shared/contracts').FileReadRecord
+  fileEdit?: import('../../shared/contracts').FileEditRecord
   streaming?: boolean
   reasoning?: string
   reasoningStreaming?: boolean
@@ -37,6 +52,11 @@ export function toPersisted(ui: CaseUiState): PersistedChatUi {
         role: message.role,
         content: message.content,
         proposal: message.proposal,
+        fileOffer: message.fileOffer,
+        commandRun: message.commandRun,
+        phaseUpdate: message.phaseUpdate,
+        fileRead: message.fileRead,
+        fileEdit: message.fileEdit,
         reasoning: message.reasoning,
         reasoningExpanded: message.reasoningExpanded,
         uploads: message.uploads
@@ -48,7 +68,7 @@ export function toPersisted(ui: CaseUiState): PersistedChatUi {
 
 export function fromPersisted(ui: PersistedChatUi): CaseUiState {
   return {
-    messages: ui.messages.map((message) => ({ ...message })),
+    messages: normalizeChatMessages(ui.messages.map((message) => ({ ...message }))),
     pendingProposal: undefined,
     status: ui.status,
     statusMessage: ui.statusMessage

@@ -21,4 +21,4 @@ resources/skills/xlsx/
 .recourse-runtime/
 
 # CA statute corpus (installed via scripts/sync-skills.sh --statutes)
-resources/statutes/
+resources/ca/statutes/

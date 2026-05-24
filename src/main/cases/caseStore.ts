@@ -2,17 +2,26 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type {
+  ArtifactKind,
   CaseRecord,
   CreateCaseRequest,
+  PhaseArtifact,
   SkillSummary,
   SmallClaimsIntake,
   WorkspaceInfo
 } from '../../shared/contracts'
 import { emptyIntake } from '../../shared/intake'
+import {
+  applyLifecyclePatch,
+  emptyLifecycle,
+  isValidArtifactKind,
+  type LifecyclePatch
+} from '../../shared/lifecycle'
+import { normalizeWorkspaceRelativePath } from '../workspaces/workspacePaths'
 import { getCaseType } from './caseTypes'
 import { WorkspaceManager } from '../workspaces/workspaceManager'
 import { SkillSeeder } from '../skills/skillSeeder'
-import { mountStatutesInWorkspace } from '../statutes/statuteMount'
+import { mountCaResourcesInWorkspace } from '../resources/caResources'
 
 interface CaseStoreFile {
   version: 1
@@ -29,7 +38,7 @@ export class CaseStore {
     private readonly storeFilePath: string,
     private readonly workspaceManager: WorkspaceManager,
     private readonly skillSeeder: SkillSeeder,
-    private readonly statutesCorpusDir: string
+    private readonly caResourcesDir: string
   ) {}
 
   async initialize(): Promise<void> {
@@ -42,7 +51,19 @@ export class CaseStore {
     try {
       const raw = await fs.readFile(this.storeFilePath, 'utf8')
       const parsed = JSON.parse(raw) as CaseStoreFile
-      this.cases = Array.isArray(parsed.cases) ? parsed.cases.filter(isValidCaseRecord) : []
+      let needsLifecycleMigration = false
+      this.cases = Array.isArray(parsed.cases)
+        ? parsed.cases.filter(isValidCaseRecord).map((record) => {
+            if (record.lifecycle?.phases?.length) {
+              return record
+            }
+            needsLifecycleMigration = true
+            return ensureLifecycle(record)
+          })
+        : []
+      if (needsLifecycleMigration) {
+        await this.persist()
+      }
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code
       if (code && code !== 'ENOENT') {
@@ -64,7 +85,11 @@ export class CaseStore {
     return this.cases.find((record) => record.id === caseId)
   }
 
-  async patchIntake(caseId: string, patch: Partial<SmallClaimsIntake>): Promise<CaseRecord | undefined> {
+  async patchIntake(
+    caseId: string,
+    patch: Partial<SmallClaimsIntake>,
+    lifecyclePatch?: LifecyclePatch
+  ): Promise<CaseRecord | undefined> {
     await this.initialize()
     const target = this.cases.find((record) => record.id === caseId)
     if (!target) {
@@ -76,12 +101,34 @@ export class CaseStore {
       const snippet = patch.whatHappened.trim().slice(0, 48)
       target.title = snippet.length < patch.whatHappened.trim().length ? `${snippet}…` : snippet
     }
+    if (lifecyclePatch) {
+      target.lifecycle = applyLifecyclePatch(
+        target.lifecycle,
+        validateLifecyclePatch(target.workspace.path, lifecyclePatch)
+      )
+    }
     target.updatedAt = new Date().toISOString()
     await fs.writeFile(
       path.join(target.workspace.path, 'intake.md'),
       buildIntakeMarkdown(target.title, target.intake),
       'utf8'
     )
+    await this.persist()
+    return target
+  }
+
+  async patchLifecycle(caseId: string, patch: LifecyclePatch): Promise<CaseRecord | undefined> {
+    await this.initialize()
+    const target = this.cases.find((record) => record.id === caseId)
+    if (!target) {
+      return undefined
+    }
+
+    target.lifecycle = applyLifecyclePatch(
+      target.lifecycle,
+      validateLifecyclePatch(target.workspace.path, patch)
+    )
+    target.updatedAt = new Date().toISOString()
     await this.persist()
     return target
   }
@@ -107,7 +154,7 @@ export class CaseStore {
       workspace.path,
       caseType.skillIds
     )
-    await mountStatutesInWorkspace(workspace.path, this.statutesCorpusDir)
+    await mountCaResourcesInWorkspace(workspace.path, this.caResourcesDir)
 
     await fs.writeFile(
       path.join(workspace.path, 'intake.md'),
@@ -124,6 +171,7 @@ export class CaseStore {
       workspace,
       skills,
       intake,
+      lifecycle: emptyLifecycle(now),
       createdAt: now,
       updatedAt: now
     }
@@ -170,6 +218,57 @@ function isValidCaseRecord(record: CaseRecord): boolean {
   return Boolean(record?.id && record.workspace?.path && record.intake)
 }
 
+function ensureLifecycle(record: CaseRecord): CaseRecord {
+  if (record.lifecycle?.phases?.length) {
+    return record
+  }
+  return {
+    ...record,
+    lifecycle: emptyLifecycle(record.updatedAt ?? new Date().toISOString())
+  }
+}
+
+function validateLifecyclePatch(
+  workspacePath: string,
+  patch: LifecyclePatch
+): LifecyclePatch {
+  if (!patch.phases?.length) {
+    return patch
+  }
+
+  const phases = patch.phases.map((phasePatch) => {
+    const validateArtifacts = (artifacts: PhaseArtifact[] | undefined): PhaseArtifact[] | undefined => {
+      if (!artifacts?.length) {
+        return artifacts
+      }
+      return artifacts.map((artifact) => validateArtifact(workspacePath, artifact))
+    }
+
+    return {
+      ...phasePatch,
+      artifacts: validateArtifacts(phasePatch.artifacts),
+      appendArtifacts: validateArtifacts(phasePatch.appendArtifacts)
+    }
+  })
+
+  return { ...patch, phases }
+}
+
+function validateArtifact(workspacePath: string, artifact: PhaseArtifact): PhaseArtifact {
+  normalizeWorkspaceRelativePath(artifact.path)
+  if (!artifact.label?.trim()) {
+    throw new Error('artifact label is required')
+  }
+  if (!isValidArtifactKind(artifact.kind)) {
+    throw new Error(`invalid artifact kind: ${artifact.kind}`)
+  }
+  if (!artifact.createdAt) {
+    return { ...artifact, createdAt: new Date().toISOString() }
+  }
+  void workspacePath
+  return artifact
+}
+
 function buildWorkspaceReadme(
   title: string,
   intake: SmallClaimsIntake,
@@ -197,7 +296,9 @@ function buildWorkspaceReadme(
     '',
     '- `intake.md` — structured intake (updated as the conversation progresses).',
     '- `skills/` — installed skill folders (e.g. `sc-100-small-claims/`).',
-    '- `statutes/ca/` — California code corpus (search with `rg`, read slices with `read_file`).',
+    '- `ca/statutes/` — California code corpus (search with `rg`, read slices with `read_file`).',
+    '- `ca/court_forms/` — official Judicial Council PDF forms (SC-100, SC-104, etc.).',
+    '- `ca/small_claims_workflow/` — step-by-step CA small claims workflow notes.',
     '- `draft/` — drafts of forms and documents (created by the agent).',
     ''
   ].join('\n')

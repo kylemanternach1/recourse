@@ -7,7 +7,7 @@ import { prependRuntimePath, resolveRuntimePaths } from './runtimePaths'
 const SYSTEM_BINARIES: Array<Omit<ToolCheck, 'available' | 'path'>> = [
   {
     name: 'rg',
-    purpose: 'Ripgrep — fast search over statutes/ and workspace text (used by the agent via shell).',
+    purpose: 'Ripgrep — fast search over ca/statutes/ and workspace text (used by the agent via shell).',
     installHint: 'brew install ripgrep'
   },
   {
@@ -60,14 +60,14 @@ const SKILLS_TO_DETECT = ['pdf', 'docx', 'pptx', 'xlsx']
 export class ToolsDoctor {
   constructor(
     private readonly resourcesRoot: string,
-    private readonly statutesCorpusDir: string
+    private readonly caResourcesDir: string
   ) {}
 
   async check(): Promise<ToolCheckResult> {
     const tools = await this.checkBinaries()
     const skills = await this.checkSkills()
     const statutesReady = await pathExists(
-      path.join(this.statutesCorpusDir, 'CA Code - Code of Civil Procedure.txt')
+      path.join(this.caResourcesDir, 'statutes', 'CA Code - Code of Civil Procedure.txt')
     )
     const runtimeReady =
       statutesReady &&

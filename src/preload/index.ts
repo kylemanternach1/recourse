@@ -1,7 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   AgentEvent,
-  ApprovalDecision,
   CaseRecord,
   CaseTypeOption,
   CreateCaseRequest,
@@ -32,6 +31,14 @@ const api = {
   resetDevData: (): Promise<void> => ipcRenderer.invoke('dev:reset'),
   openCaseWorkspace: (caseId: string): Promise<boolean> =>
     ipcRenderer.invoke('case:open-workspace', caseId),
+  openWorkspaceFile: (caseId: string, relativePath: string): Promise<string> =>
+    ipcRenderer.invoke('workspace:open-file', caseId, relativePath),
+  saveWorkspaceDownload: (
+    caseId: string,
+    relativePath: string,
+    suggestedName?: string
+  ): Promise<{ saved: boolean; path?: string }> =>
+    ipcRenderer.invoke('workspace:save-download', caseId, relativePath, suggestedName),
   selectUploads: (): Promise<UploadDraft[]> => ipcRenderer.invoke('case:select-uploads'),
   probeUploads: (sourcePaths: string[]): Promise<UploadDraft[]> =>
     ipcRenderer.invoke('case:probe-uploads', sourcePaths),
@@ -40,8 +47,6 @@ const api = {
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
   sendMessage: (request: SendMessageRequest): Promise<void> =>
     ipcRenderer.invoke('agent:send-message', request),
-  decideProposal: (decision: ApprovalDecision): Promise<void> =>
-    ipcRenderer.invoke('agent:decide-proposal', decision),
   onAgentEvent: (listener: (event: AgentEvent) => void): (() => void) => {
     const handler = (_: Electron.IpcRendererEvent, event: AgentEvent): void => listener(event)
     ipcRenderer.on('agent:event', handler)

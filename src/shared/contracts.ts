@@ -6,6 +6,63 @@ export type CaseTypeId = 'sc-100-small-claims'
 
 export type DefendantType = 'individual' | 'business' | 'sole-proprietor'
 
+export type PhaseId =
+  | 'intake'
+  | 'eligibility'
+  | 'parties_venue'
+  | 'evidence_damages'
+  | 'forms'
+  | 'filing'
+  | 'service'
+  | 'hearing_prep'
+  | 'hearing'
+  | 'enforcement'
+  | 'closure'
+
+export type PhaseStatus =
+  | 'not_started'
+  | 'in_progress'
+  | 'waiting'
+  | 'blocked'
+  | 'complete'
+  | 'skipped'
+
+export type ArtifactKind = 'draft' | 'evidence' | 'filed' | 'note'
+
+export interface PhaseArtifact {
+  path: string
+  label: string
+  kind: ArtifactKind
+  createdAt: string
+}
+
+export interface PhaseState {
+  phaseId: PhaseId
+  status: PhaseStatus
+  nextAction?: string
+  waitingOn?: string
+  waitingSince?: string
+  expectedBy?: string
+  artifacts: PhaseArtifact[]
+  updatedAt: string
+}
+
+export interface CaseLifecycle {
+  currentPhase: PhaseId
+  phases: PhaseState[]
+  updatedAt: string
+}
+
+/** Snapshot shown in chat when the agent updates case phase state. */
+export interface PhaseUpdate {
+  id: string
+  phaseId: PhaseId
+  status: PhaseStatus
+  nextAction?: string
+  at: string
+  isCurrent?: boolean
+}
+
 export interface PolicyPreset {
   id: PolicyPresetId
   name: string
@@ -74,6 +131,7 @@ export interface CaseRecord {
   workspace: WorkspaceInfo
   skills: SkillSummary[]
   intake: SmallClaimsIntake
+  lifecycle: CaseLifecycle
   createdAt: string
   updatedAt: string
 }
@@ -92,6 +150,49 @@ export interface CommandProposal {
   cwd: string
   reason: string
   createdAt: string
+}
+
+/** A shell command the agent ran, shown in the chat transcript. */
+export interface CommandRun {
+  id: string
+  command: string
+  exitCode: number | null
+  stdout: string
+  stderr: string
+  blockedEvents: string[]
+}
+
+/** File slice shown in chat when the agent reads a workspace file. */
+export interface FileReadRecord {
+  id: string
+  path: string
+  startLine: number
+  endLine: number
+  totalLines: number
+  lines: string[]
+  truncated: boolean
+}
+
+/** File change shown in chat when the agent edits a workspace file. */
+export interface FileEditRecord {
+  id: string
+  path: string
+  kind: 'create' | 'overwrite' | 'patch'
+  replacements?: number
+  oldText?: string
+  newText?: string
+  truncated?: boolean
+}
+
+/** A workspace file the agent offers for the user to download. */
+export interface FileOffer {
+  id: string
+  relativePath: string
+  name: string
+  size: number
+  mimeType?: string
+  label: string
+  description?: string
 }
 
 export interface SandboxRunResult {
@@ -113,6 +214,12 @@ export type AgentEvent =
   | { type: 'reasoning-delta'; caseId: string; messageId: string; delta: string }
   | { type: 'reasoning-end'; caseId: string; messageId: string }
   | { type: 'error'; caseId: string; message: string }
+  | { type: 'case-updated'; caseId: string; caseRecord: CaseRecord }
+  | { type: 'file-offer'; caseId: string; file: FileOffer }
+  | { type: 'command-run'; caseId: string; run: CommandRun }
+  | { type: 'phase-update'; caseId: string; update: PhaseUpdate }
+  | { type: 'file-read'; caseId: string; read: FileReadRecord }
+  | { type: 'file-edit'; caseId: string; edit: FileEditRecord }
 
 /** A user-selected file that has been stat'd but not yet copied into the case workspace. */
 export interface UploadDraft {
@@ -190,9 +297,23 @@ export interface LlmMessage {
 /** Serializable chat transcript for UI restore (per case workspace). */
 export interface PersistedChatMessage {
   id: string
-  role: 'user' | 'assistant' | 'system' | 'tool-use'
+  role:
+    | 'user'
+    | 'assistant'
+    | 'system'
+    | 'tool-use'
+    | 'file-download'
+    | 'command-run'
+    | 'phase-update'
+    | 'file-read'
+    | 'file-edit'
   content: string
   proposal?: CommandProposal
+  fileOffer?: FileOffer
+  commandRun?: CommandRun
+  phaseUpdate?: PhaseUpdate
+  fileRead?: FileReadRecord
+  fileEdit?: FileEditRecord
   reasoning?: string
   reasoningExpanded?: boolean
   uploads?: UploadedFile[]

@@ -65,7 +65,12 @@ export async function saveAgentConversation(
 export function lastMessagePreview(messages: PersistedChatUi['messages']): string | undefined {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]
-    if (message.role === 'tool-use') {
+    if (
+      message.role === 'tool-use' ||
+      message.role === 'phase-update' ||
+      message.role === 'file-read' ||
+      message.role === 'file-edit'
+    ) {
       continue
     }
     const text = message.content.trim()

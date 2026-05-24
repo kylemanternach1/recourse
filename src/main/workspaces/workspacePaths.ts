@@ -1,6 +1,6 @@
 import path from 'node:path'
 
-const READ_ONLY_PREFIXES = ['statutes/ca/']
+const READ_ONLY_PREFIXES = ['ca/']
 
 export function normalizeWorkspaceRelativePath(relativePath: string): string {
   const normalized = relativePath.replace(/^\/+/, '').trim()

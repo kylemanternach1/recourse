@@ -9,8 +9,15 @@ import type { LlmMessage, LlmToolCall } from '../../shared/contracts'
 export const RUN_COMMAND_TOOL_NAME = 'run_workspace_command'
 export const READ_FILE_TOOL_NAME = 'read_file'
 export const EDIT_FILE_TOOL_NAME = 'edit_file'
+export const UPDATE_CASE_STATE_TOOL_NAME = 'update_case_state'
+export const OFFER_FILE_DOWNLOAD_TOOL_NAME = 'offer_file_download'
 
-export const READ_ONLY_TOOL_NAMES = new Set([READ_FILE_TOOL_NAME, EDIT_FILE_TOOL_NAME])
+export const READ_ONLY_TOOL_NAMES = new Set([
+  READ_FILE_TOOL_NAME,
+  EDIT_FILE_TOOL_NAME,
+  UPDATE_CASE_STATE_TOOL_NAME,
+  OFFER_FILE_DOWNLOAD_TOOL_NAME
+])
 
 export type LlmStreamEvent =
   | { type: 'content'; delta: string }
@@ -31,7 +38,7 @@ const RUN_COMMAND_TOOL: ChatCompletionTool = {
   function: {
     name: RUN_COMMAND_TOOL_NAME,
     description:
-      'Run a single shell command inside the active case workspace (cwd is the workspace root). Use for rg/grep, ls, file writes, and skill scripts. ripgrep (`rg`) is available when installed on the host — prefer `rg -n` over grep for searching statutes/ and other text.',
+      'Run a single shell command inside the active case workspace (cwd is the workspace root). Executes immediately; output is shown in chat. Use for rg/grep, ls, and skill scripts. Prefer `rg -n` over grep for searching ca/statutes/ and other text.',
     parameters: {
       type: 'object',
       properties: {
@@ -61,7 +68,7 @@ const READ_FILE_TOOL: ChatCompletionTool = {
         path: {
           type: 'string',
           description:
-            'Workspace-relative path (e.g. statutes/ca/CA Code - Code of Civil Procedure.txt, skills/pdf/SKILL.md, uploads/foo.txt).'
+            'Workspace-relative path (e.g. ca/statutes/CA Code - Code of Civil Procedure.txt, ca/court_forms/sc100.pdf, skills/pdf/SKILL.md, uploads/foo.txt).'
         },
         start_line: {
           type: 'number',
@@ -82,7 +89,7 @@ const EDIT_FILE_TOOL: ChatCompletionTool = {
   function: {
     name: EDIT_FILE_TOOL_NAME,
     description:
-      'Create or edit a text file in the case workspace. Prefer search_replace for small edits; use content for new files or full rewrites. statutes/ca/ is read-only. Read the target file first so old_string matches exactly.',
+      'Create or edit a text file in the case workspace. Prefer search_replace for small edits; use content for new files or full rewrites. Anything under ca/ is read-only. Read the target file first so old_string matches exactly.',
     parameters: {
       type: 'object',
       properties: {
@@ -115,7 +122,140 @@ const EDIT_FILE_TOOL: ChatCompletionTool = {
   }
 }
 
-const AGENT_TOOLS: ChatCompletionTool[] = [RUN_COMMAND_TOOL, READ_FILE_TOOL, EDIT_FILE_TOOL]
+const UPDATE_CASE_STATE_TOOL: ChatCompletionTool = {
+  type: 'function',
+  function: {
+    name: UPDATE_CASE_STATE_TOOL_NAME,
+    description:
+      'Update case lifecycle phase status, wait states, artifacts, and optionally structured intake fields. Call when advance criteria for the current phase are met — do not only announce progress in chat. Auto-executes without user approval.',
+    parameters: {
+      type: 'object',
+      properties: {
+        current_phase: {
+          type: 'string',
+          description:
+            'Set the active phase id (intake, eligibility, parties_venue, evidence_damages, forms, filing, service, hearing_prep, hearing, enforcement, closure). Usually inferred when marking a phase complete.'
+        },
+        phases: {
+          type: 'array',
+          description: 'Per-phase updates to merge into case lifecycle.',
+          items: {
+            type: 'object',
+            properties: {
+              phase_id: {
+                type: 'string',
+                description: 'Phase id to update.'
+              },
+              status: {
+                type: 'string',
+                enum: ['not_started', 'in_progress', 'waiting', 'blocked', 'complete', 'skipped']
+              },
+              next_action: {
+                type: 'string',
+                description: 'One-line next action for the plaintiff (current phase only). Pass empty string to clear.'
+              },
+              waiting_on: {
+                type: 'string',
+                description: 'What external event we are waiting for. Pass empty string to clear.'
+              },
+              waiting_since: {
+                type: 'string',
+                description: 'ISO timestamp when wait started. Omit to auto-set when entering waiting.'
+              },
+              expected_by: {
+                type: 'string',
+                description: 'ISO date or human deadline hint for the wait.'
+              },
+              artifacts: {
+                type: 'array',
+                description: 'Replace artifact list for this phase.',
+                items: {
+                  type: 'object',
+                  properties: {
+                    path: { type: 'string' },
+                    label: { type: 'string' },
+                    kind: { type: 'string', enum: ['draft', 'evidence', 'filed', 'note'] },
+                    created_at: { type: 'string' }
+                  },
+                  required: ['path', 'label', 'kind']
+                }
+              },
+              append_artifacts: {
+                type: 'array',
+                description: 'Artifacts to add or update by path.',
+                items: {
+                  type: 'object',
+                  properties: {
+                    path: { type: 'string' },
+                    label: { type: 'string' },
+                    kind: { type: 'string', enum: ['draft', 'evidence', 'filed', 'note'] },
+                    created_at: { type: 'string' }
+                  },
+                  required: ['path', 'label', 'kind']
+                }
+              }
+            },
+            required: ['phase_id']
+          }
+        },
+        intake: {
+          type: 'object',
+          description: 'Optional structured intake fields to merge when plaintiff confirms facts.',
+          properties: {
+            plaintiff_name: { type: 'string' },
+            plaintiff_city: { type: 'string' },
+            defendant_name: { type: 'string' },
+            defendant_type: {
+              type: 'string',
+              enum: ['individual', 'business', 'sole-proprietor']
+            },
+            amount_claimed: { type: 'number' },
+            incident_date: { type: 'string' },
+            what_happened: { type: 'string' },
+            contacted_defendant: { type: 'boolean' },
+            contact_notes: { type: 'string' }
+          }
+        }
+      }
+    }
+  }
+}
+
+const OFFER_FILE_DOWNLOAD_TOOL: ChatCompletionTool = {
+  type: 'function',
+  function: {
+    name: OFFER_FILE_DOWNLOAD_TOOL_NAME,
+    description:
+      'Surface a workspace file in the chat with a Download button for the plaintiff. Use after creating or filling a draft (e.g. draft/forms/sc100-filled.pdf, draft/demand-letter.md) or when sharing a generated PDF path. The file must already exist in the case workspace.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Workspace-relative path to the file (e.g. draft/forms/sc100-filled.pdf, draft/demand-letter.md, uploads/contract.pdf).'
+        },
+        label: {
+          type: 'string',
+          description: 'Short title shown on the download card (e.g. "Filled SC-100 PDF", "Demand letter").'
+        },
+        description: {
+          type: 'string',
+          description: 'Optional one-line note shown under the title.'
+        }
+      },
+      required: ['path', 'label']
+    }
+  }
+}
+
+const AGENT_TOOLS: ChatCompletionTool[] = [
+  RUN_COMMAND_TOOL,
+  READ_FILE_TOOL,
+  EDIT_FILE_TOOL,
+  UPDATE_CASE_STATE_TOOL,
+  OFFER_FILE_DOWNLOAD_TOOL
+]
 
 export class OpenAICompatibleProvider implements LlmProvider {
   private readonly client?: OpenAI

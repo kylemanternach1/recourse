@@ -5,14 +5,19 @@ import type { Components } from 'react-markdown'
 import type {
   AgentEvent,
   CaseRecord,
-  CommandProposal,
   ConversationListItem,
+  PhaseId,
   UploadDraft,
   UploadedFile
 } from '../shared/contracts'
-import { intakeSummaryLine } from '../shared/intake'
 import { ChatSidebar } from './components/ChatSidebar'
+import { PhaseBanner } from './components/PhaseBanner'
+import { FileEditCard } from './components/FileEditCard'
+import { FileReadCard } from './components/FileReadCard'
+import { PhaseUpdateCard } from './components/PhaseUpdateCard'
+import { TimelineDrawer } from './components/TimelineDrawer'
 import { useSidebarCollapse } from './hooks/useSidebarCollapse'
+import { useTimelineDrawer } from './hooks/useTimelineDrawer'
 import {
   type CaseUiState,
   type ChatMessage,
@@ -20,6 +25,13 @@ import {
   fromPersisted,
   toPersisted
 } from './lib/chatUi'
+import { normalizeChatMessages } from './lib/chatNormalize'
+import { isLegacyFileToolLog, toolUseToFileEdit, toolUseToFileRead } from './lib/fileToolChat'
+import {
+  findPhaseAnchorMessageId,
+  isLegacyPhaseLog,
+  toolUseToPhaseUpdate
+} from './lib/phaseChat'
 
 export function App(): JSX.Element {
   const recourse = window.recourse
@@ -33,14 +45,37 @@ export function App(): JSX.Element {
   const [draftsByCaseId, setDraftsByCaseId] = useState<Record<string, string>>({})
   const [pendingUploads, setPendingUploads] = useState<Record<string, UploadDraft[]>>({})
   const sidebar = useSidebarCollapse()
+  const timeline = useTimelineDrawer()
   const [isSending, setIsSending] = useState(false)
   const [isDraggingFiles, setIsDraggingFiles] = useState(false)
   const [uploadError, setUploadError] = useState<string | undefined>()
+  const [highlightMessageId, setHighlightMessageId] = useState<string | undefined>()
   const activeUploads = activeCaseId ? pendingUploads[activeCaseId] ?? [] : []
 
-  const activeUi = useMemo<CaseUiState>(
-    () => (activeCaseId ? caseState[activeCaseId] ?? defaultUiState : defaultUiState),
-    [caseState, activeCaseId]
+  const activeUi = useMemo<CaseUiState>(() => {
+    const raw = activeCaseId ? caseState[activeCaseId] ?? defaultUiState : defaultUiState
+    return { ...raw, messages: normalizeChatMessages(raw.messages) }
+  }, [caseState, activeCaseId])
+
+  const jumpToPhaseInChat = useCallback(
+    (phaseId: PhaseId) => {
+      const phase = activeCase?.lifecycle.phases.find((entry) => entry.phaseId === phaseId)
+      if (!phase || phase.status === 'not_started') {
+        return
+      }
+      const messageId = findPhaseAnchorMessageId(activeUi.messages, phaseId)
+      if (!messageId) {
+        return
+      }
+      timeline.closeDrawer()
+      requestAnimationFrame(() => {
+        const element = transcriptRef.current?.querySelector(`[data-message-id="${messageId}"]`)
+        element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        setHighlightMessageId(messageId)
+        window.setTimeout(() => setHighlightMessageId(undefined), 2200)
+      })
+    },
+    [activeCase, activeUi.messages, timeline]
   )
 
   const updateCaseState = useCallback(
@@ -55,26 +90,104 @@ export function App(): JSX.Element {
 
   const handleAgentEvent = useCallback(
     (event: AgentEvent) => {
+      if (event.type === 'case-updated') {
+        setCases((current) =>
+          current.map((record) => (record.id === event.caseId ? event.caseRecord : record))
+        )
+        setActiveCase((current) =>
+          current?.id === event.caseId ? event.caseRecord : current
+        )
+        return
+      }
+
+      if (event.type === 'file-offer') {
+        updateCaseState(event.caseId, (current) => ({
+          ...current,
+          messages: [
+            ...current.messages,
+            {
+              id: event.file.id,
+              role: 'file-download',
+              content: event.file.label,
+              fileOffer: event.file
+            }
+          ]
+        }))
+        return
+      }
+
+      if (event.type === 'command-run') {
+        updateCaseState(event.caseId, (current) => ({
+          ...current,
+          messages: [
+            ...current.messages,
+            {
+              id: event.run.id,
+              role: 'command-run',
+              content: event.run.command,
+              commandRun: event.run
+            }
+          ]
+        }))
+        return
+      }
+
+      if (event.type === 'phase-update') {
+        updateCaseState(event.caseId, (current) => ({
+          ...current,
+          messages: [
+            ...current.messages,
+            {
+              id: event.update.id,
+              role: 'phase-update',
+              content: event.update.phaseId,
+              phaseUpdate: event.update
+            }
+          ]
+        }))
+        return
+      }
+
+      if (event.type === 'file-read') {
+        updateCaseState(event.caseId, (current) => ({
+          ...current,
+          messages: [
+            ...current.messages,
+            {
+              id: event.read.id,
+              role: 'file-read',
+              content: event.read.path,
+              fileRead: event.read
+            }
+          ]
+        }))
+        return
+      }
+
+      if (event.type === 'file-edit') {
+        updateCaseState(event.caseId, (current) => ({
+          ...current,
+          messages: [
+            ...current.messages,
+            {
+              id: event.edit.id,
+              role: 'file-edit',
+              content: event.edit.path,
+              fileEdit: event.edit
+            }
+          ]
+        }))
+        return
+      }
+
       updateCaseState(event.caseId, (current) => {
         if (event.type === 'status') {
           return { ...current, status: event.status, statusMessage: event.message }
         }
-        if (event.type === 'proposal') {
-          return {
-            ...current,
-            pendingProposal: event.proposal,
-            messages: [
-              ...current.messages,
-              {
-                id: crypto.randomUUID(),
-                role: 'assistant',
-                content: event.proposal.reason,
-                proposal: event.proposal
-              }
-            ]
-          }
-        }
         if (event.type === 'log' && event.stream === 'agent') {
+          if (isLegacyPhaseLog(event.message) || isLegacyFileToolLog(event.message)) {
+            return current
+          }
           return {
             ...current,
             messages: [
@@ -355,38 +468,27 @@ export function App(): JSX.Element {
 
   const transcriptMessages = activeUi.messages
 
-  const contextSummary = activeCase ? intakeSummaryLine(activeCase) : null
-  const isDev = import.meta.env.DEV
-
-  async function resetDevData(): Promise<void> {
-    if (!recourse) {
-      return
-    }
-    const confirmed = window.confirm(
-      'Delete this case and all workspace files? You will start fresh on the next message.'
-    )
-    if (!confirmed) {
-      return
-    }
-    try {
-      await recourse.resetDevData()
-      const remaining = await recourse.listCases()
-      if (remaining.length > 0) {
-        throw new Error('Case data is still on disk. Quit the app and run: npm run reset')
+  const downloadWorkspaceFile = useCallback(
+    async (file: import('../shared/contracts').FileOffer) => {
+      if (!recourse || !activeCaseId) {
+        return
       }
-      setActiveCase(undefined)
-      setCases([])
-      setConversations([])
-      setCaseState({})
-      setPendingUploads({})
-      setDraftsByCaseId({})
-      setPrompt('')
-      setUploadError(undefined)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      window.alert(`Reset failed: ${message}`)
-    }
-  }
+      try {
+        const result = await recourse.saveWorkspaceDownload(
+          activeCaseId,
+          file.relativePath,
+          file.name
+        )
+        if (!result.saved) {
+          return
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        window.alert(`Could not save file: ${message}`)
+      }
+    },
+    [recourse, activeCaseId]
+  )
 
   if (!recourse) {
     return <MissingBridge />
@@ -567,28 +669,6 @@ export function App(): JSX.Element {
     [activeCaseId, updateCaseState]
   )
 
-  async function decideProposal(approved: boolean): Promise<void> {
-    if (!recourse || !activeCaseId || !activeUi.pendingProposal) {
-      return
-    }
-    const proposalId = activeUi.pendingProposal.id
-    updateCaseState(activeCaseId, (current) => ({
-      ...current,
-      pendingProposal: undefined,
-      messages: current.messages.map((message) =>
-        message.proposal?.id === proposalId
-          ? {
-              ...message,
-              content: `${message.content}\n\n${approved ? 'Approved' : 'Rejected'} by you.`,
-              proposal: undefined
-            }
-          : message
-      )
-    }))
-
-    await recourse.decideProposal({ caseId: activeCaseId, proposalId, approved })
-  }
-
   const dragLeaveTimer = useRef<number | undefined>(undefined)
   const onDragEnter = (event: React.DragEvent<HTMLElement>): void => {
     if (!event.dataTransfer.types?.includes('Files')) return
@@ -650,25 +730,11 @@ export function App(): JSX.Element {
 
       <div className="main-pane">
         <div className="chat-layout">
-          <header className="top-bar">
-            <div className="top-bar-spacer" />
-            {isDev ? (
-              <button
-                type="button"
-                className="dev-reset"
-                onClick={() => void resetDevData()}
-                title="Delete all cases (dev only)"
-              >
-                Reset
-              </button>
-            ) : null}
-          </header>
-
-        {contextSummary ? (
-          <div className="case-context-banner">
-            <span className="eyebrow">SC-100 · Small claims</span>
-            <p className="case-context-line">{contextSummary}</p>
-          </div>
+        {activeCase ? (
+          <PhaseBanner
+            caseRecord={activeCase}
+            onOpenTimeline={timeline.openDrawer}
+          />
         ) : null}
 
         <div className="transcript" ref={transcriptRef}>
@@ -676,9 +742,10 @@ export function App(): JSX.Element {
             <TranscriptItem
               key={message.id}
               message={message}
-              onApprove={() => void decideProposal(true)}
-              onReject={() => void decideProposal(false)}
+              caseId={activeCaseId}
+              highlighted={message.id === highlightMessageId}
               onToggleReasoning={() => toggleReasoning(message.id)}
+              onDownloadFile={(file) => void downloadWorkspaceFile(file)}
             />
           ))}
           {activeCaseId &&
@@ -762,6 +829,14 @@ export function App(): JSX.Element {
         ) : null}
         </div>
       </div>
+
+      <TimelineDrawer
+        open={timeline.open}
+        caseRecord={activeCase}
+        messages={activeUi.messages}
+        onClose={timeline.closeDrawer}
+        onJumpToPhase={jumpToPhaseInChat}
+      />
     </main>
   )
 }
@@ -799,18 +874,29 @@ function formatBytes(size: number): string {
 
 function TranscriptItem({
   message,
-  onApprove,
-  onReject,
-  onToggleReasoning
+  caseId,
+  highlighted,
+  onToggleReasoning,
+  onDownloadFile
 }: {
   message: ChatMessage
-  onApprove: () => void
-  onReject: () => void
+  caseId?: string
+  highlighted?: boolean
   onToggleReasoning: () => void
+  onDownloadFile: (file: import('../shared/contracts').FileOffer) => void
 }): JSX.Element {
+  const wrap = (className: string, children: JSX.Element | JSX.Element[]): JSX.Element => (
+    <div
+      className={`transcript-anchor${highlighted ? ' transcript-anchor--highlight' : ''}`}
+      data-message-id={message.id}
+    >
+      <div className={className}>{children}</div>
+    </div>
+  )
+
   if (message.role === 'user') {
     return (
-      <article className="msg user">
+      <article className="msg user" data-message-id={message.id}>
         {message.content.length > 0 ? (
           <div className="msg-content">{message.content}</div>
         ) : null}
@@ -834,10 +920,92 @@ function TranscriptItem({
   }
 
   if (message.role === 'tool-use') {
-    return (
+    const legacyPhase = toolUseToPhaseUpdate(message)
+    if (legacyPhase) {
+      return wrap('msg phase-update', <PhaseUpdateCard update={legacyPhase} />)
+    }
+    const legacyRead = toolUseToFileRead(message)
+    if (legacyRead) {
+      return wrap('msg file-read', <FileReadCard read={legacyRead} />)
+    }
+    const legacyEdit = toolUseToFileEdit(message)
+    if (legacyEdit) {
+      return wrap('msg file-edit', <FileEditCard edit={legacyEdit} />)
+    }
+    return wrap(
+      'tool-use-wrap',
       <p className="tool-use-line" aria-live="polite">
         {message.content}
       </p>
+    )
+  }
+
+  if (message.role === 'phase-update' && message.phaseUpdate) {
+    return wrap('msg phase-update', <PhaseUpdateCard update={message.phaseUpdate} />)
+  }
+
+  if (message.role === 'file-read' && message.fileRead) {
+    return wrap('msg file-read', <FileReadCard read={message.fileRead} />)
+  }
+
+  if (message.role === 'file-edit' && message.fileEdit) {
+    return wrap('msg file-edit', <FileEditCard edit={message.fileEdit} />)
+  }
+
+  if (message.role === 'command-run' && message.commandRun) {
+    const run = message.commandRun
+    const output = formatCommandOutput(run)
+    return wrap(
+      'msg command-run',
+      <>
+        <div className="msg-avatar">R</div>
+        <div className="command-run-card">
+          <p className="command-run-label">Ran command</p>
+          <pre className="command-run-cmd">{run.command}</pre>
+          {output.length > 0 ? (
+            <pre className="command-run-output">{output}</pre>
+          ) : (
+            <p className="command-run-empty">No output.</p>
+          )}
+          {run.blockedEvents.length > 0 ? (
+            <p className="command-run-meta">
+              {run.blockedEvents.length} sandbox block(s)
+            </p>
+          ) : null}
+        </div>
+      </>
+    )
+  }
+
+  if (message.role === 'file-download' && message.fileOffer) {
+    const file = message.fileOffer
+    return wrap(
+      'msg file-download',
+      <>
+        <div className="msg-avatar">R</div>
+        <div className="download-card">
+          <div className="download-card-icon" aria-hidden>
+            <FileIcon />
+          </div>
+          <div className="download-card-body">
+            <p className="download-card-label">{file.label}</p>
+            {file.description ? (
+              <p className="download-card-desc">{file.description}</p>
+            ) : null}
+            <p className="download-card-meta">
+              {file.name} · {formatBytes(file.size)}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="filled small download-card-btn"
+            disabled={!caseId}
+            onClick={() => onDownloadFile(file)}
+          >
+            Download
+          </button>
+        </div>
+      </>
     )
   }
 
@@ -870,23 +1038,26 @@ function TranscriptItem({
             {message.streaming ? <span className="caret" aria-hidden /> : null}
           </div>
         ) : null}
-        {message.proposal ? (
-          <div className="proposal">
-            <div className="proposal-label">Proposed command</div>
-            <pre>{message.proposal.command}</pre>
-            <div className="proposal-actions">
-              <button type="button" className="ghost small" onClick={onReject}>
-                Reject
-              </button>
-              <button type="button" className="filled small" onClick={onApprove}>
-                Approve & run
-              </button>
-            </div>
-          </div>
-        ) : null}
       </div>
     </article>
   )
+}
+
+function formatCommandOutput(run: import('../shared/contracts').CommandRun): string {
+  const parts: string[] = []
+  const stdout = run.stdout.trim()
+  const stderr = run.stderr.trim()
+  const blocked = run.blockedEvents.join('\n').trim()
+  if (stdout.length > 0) {
+    parts.push(stdout)
+  }
+  if (stderr.length > 0) {
+    parts.push(stderr)
+  }
+  if (blocked.length > 0) {
+    parts.push(`[sandbox]\n${blocked}`)
+  }
+  return parts.join('\n\n')
 }
 
 const MARKDOWN_COMPONENTS: Components = {
@@ -1008,11 +1179,18 @@ function MissingBridge(): JSX.Element {
 
 function PaperclipIcon(): JSX.Element {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
-      <path
-        d="M10.2 2.3a2.7 2.7 0 0 1 3.8 3.8L7 13.1a4.4 4.4 0 1 1-6.2-6.2L7.6 0.1l1 1L1.8 7.9a3 3 0 1 0 4.2 4.2l6.7-6.7a1.4 1.4 0 1 0-1.9-1.9L4.4 10a0.3 0.3 0 0 0 0 0.4 0.3 0.3 0 0 0 0.4 0l6.3-6.3 1 1-6.3 6.3a1.7 1.7 0 0 1-2.4-2.4l6.8-6.8z"
-        fill="currentColor"
-      />
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 17.99 8.84L9.41 17.41a2 2 0 1 1-2.83-2.83l8.49-8.48" />
     </svg>
   )
 }
@@ -1033,11 +1211,19 @@ function FileIcon(): JSX.Element {
 
 function SendIcon(): JSX.Element {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
-      <path
-        d="M2.5 13.5L13.5 8L2.5 2.5L2.5 6.5L10 8L2.5 9.5z"
-        fill="currentColor"
-      />
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M12 19V5" />
+      <path d="m5 12 7-7 7 7" />
     </svg>
   )
 }
