@@ -7,6 +7,10 @@ import type {
 import type { LlmMessage, LlmToolCall } from '../../shared/contracts'
 
 export const RUN_COMMAND_TOOL_NAME = 'run_workspace_command'
+export const READ_FILE_TOOL_NAME = 'read_file'
+export const EDIT_FILE_TOOL_NAME = 'edit_file'
+
+export const READ_ONLY_TOOL_NAMES = new Set([READ_FILE_TOOL_NAME, EDIT_FILE_TOOL_NAME])
 
 export type LlmStreamEvent =
   | { type: 'content'; delta: string }
@@ -27,7 +31,7 @@ const RUN_COMMAND_TOOL: ChatCompletionTool = {
   function: {
     name: RUN_COMMAND_TOOL_NAME,
     description:
-      'Run a single shell command inside the active case workspace and stream stdout/stderr back to the agent.',
+      'Run a single shell command inside the active case workspace (cwd is the workspace root). Use for rg/grep, ls, file writes, and skill scripts. ripgrep (`rg`) is available when installed on the host — prefer `rg -n` over grep for searching statutes/ and other text.',
     parameters: {
       type: 'object',
       properties: {
@@ -44,6 +48,74 @@ const RUN_COMMAND_TOOL: ChatCompletionTool = {
     }
   }
 }
+
+const READ_FILE_TOOL: ChatCompletionTool = {
+  type: 'function',
+  function: {
+    name: READ_FILE_TOOL_NAME,
+    description:
+      'Read a slice of a text file inside the case workspace by line number (1-based, inclusive). Use after rg finds line numbers. Never read whole large files — always pass a tight start_line/end_line window (max 250 lines per call).',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Workspace-relative path (e.g. statutes/ca/CA Code - Code of Civil Procedure.txt, skills/pdf/SKILL.md, uploads/foo.txt).'
+        },
+        start_line: {
+          type: 'number',
+          description: 'First line to read (1-based, inclusive).'
+        },
+        end_line: {
+          type: 'number',
+          description: 'Last line to read (1-based, inclusive).'
+        }
+      },
+      required: ['path', 'start_line', 'end_line']
+    }
+  }
+}
+
+const EDIT_FILE_TOOL: ChatCompletionTool = {
+  type: 'function',
+  function: {
+    name: EDIT_FILE_TOOL_NAME,
+    description:
+      'Create or edit a text file in the case workspace. Prefer search_replace for small edits; use content for new files or full rewrites. statutes/ca/ is read-only. Read the target file first so old_string matches exactly.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Workspace-relative path (e.g. intake.md, draft/demand-letter.md, draft/notes.txt).'
+        },
+        old_string: {
+          type: 'string',
+          description:
+            'Exact text to replace (required with new_string). Must appear once unless replace_all is true.'
+        },
+        new_string: {
+          type: 'string',
+          description: 'Replacement text (use with old_string).'
+        },
+        replace_all: {
+          type: 'boolean',
+          description: 'Replace every occurrence of old_string (default false).'
+        },
+        content: {
+          type: 'string',
+          description:
+            'Full file contents for create/overwrite. Do not combine with old_string/new_string.'
+        }
+      },
+      required: ['path']
+    }
+  }
+}
+
+const AGENT_TOOLS: ChatCompletionTool[] = [RUN_COMMAND_TOOL, READ_FILE_TOOL, EDIT_FILE_TOOL]
 
 export class OpenAICompatibleProvider implements LlmProvider {
   private readonly client?: OpenAI
@@ -99,7 +171,7 @@ export class OpenAICompatibleProvider implements LlmProvider {
     const baseParams: ChatCompletionCreateParamsStreaming = {
       model: this.model,
       messages: messages.map(toOpenAIMessage),
-      tools: [RUN_COMMAND_TOOL],
+      tools: AGENT_TOOLS,
       tool_choice: 'auto',
       stream: true
     }

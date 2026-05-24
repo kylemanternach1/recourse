@@ -12,7 +12,7 @@ export class SkillSeeder {
 
     const seeded: SkillSummary[] = []
     for (const skillId of skillIds) {
-      const skill = this.catalog.get(skillId)
+      const skill = await this.catalog.getAsync(skillId)
       if (!skill) {
         continue
       }

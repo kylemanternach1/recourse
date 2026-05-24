@@ -4,62 +4,40 @@ import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
 import type {
   AgentEvent,
-  AgentStatus,
   CaseRecord,
   CommandProposal,
-  DefendantType,
-  SmallClaimsIntake,
+  ConversationListItem,
+  UploadDraft,
   UploadedFile
 } from '../shared/contracts'
-
-interface ChatMessage {
-  id: string
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  proposal?: CommandProposal
-  streaming?: boolean
-  reasoning?: string
-  reasoningStreaming?: boolean
-  reasoningExpanded?: boolean
-  uploads?: UploadedFile[]
-}
-
-interface CaseUiState {
-  messages: ChatMessage[]
-  pendingProposal?: CommandProposal
-  status: AgentStatus
-  statusMessage: string
-}
-
-const defaultUiState: CaseUiState = {
-  messages: [],
-  status: 'idle',
-  statusMessage: 'Ready when you are.'
-}
-
-const DEFENDANT_TYPE_LABEL: Record<DefendantType, string> = {
-  individual: 'Individual',
-  business: 'Business',
-  'sole-proprietor': 'Sole proprietor'
-}
+import { intakeSummaryLine } from '../shared/intake'
+import { ChatSidebar } from './components/ChatSidebar'
+import { useSidebarCollapse } from './hooks/useSidebarCollapse'
+import {
+  type CaseUiState,
+  type ChatMessage,
+  defaultUiState,
+  fromPersisted,
+  toPersisted
+} from './lib/chatUi'
 
 export function App(): JSX.Element {
   const recourse = window.recourse
   const transcriptRef = useRef<HTMLDivElement>(null)
   const [cases, setCases] = useState<CaseRecord[]>([])
-  const [activeCaseId, setActiveCaseId] = useState<string>()
+  const [conversations, setConversations] = useState<ConversationListItem[]>([])
+  const [activeCase, setActiveCase] = useState<CaseRecord | undefined>()
   const [caseState, setCaseState] = useState<Record<string, CaseUiState>>({})
-  const [showNewCase, setShowNewCase] = useState(false)
+  const activeCaseId = activeCase?.id
   const [prompt, setPrompt] = useState('')
-  const [pendingUploads, setPendingUploads] = useState<Record<string, UploadedFile[]>>({})
+  const [draftsByCaseId, setDraftsByCaseId] = useState<Record<string, string>>({})
+  const [pendingUploads, setPendingUploads] = useState<Record<string, UploadDraft[]>>({})
+  const sidebar = useSidebarCollapse()
+  const [isSending, setIsSending] = useState(false)
   const [isDraggingFiles, setIsDraggingFiles] = useState(false)
   const [uploadError, setUploadError] = useState<string | undefined>()
   const activeUploads = activeCaseId ? pendingUploads[activeCaseId] ?? [] : []
 
-  const activeCase = useMemo(
-    () => cases.find((record) => record.id === activeCaseId),
-    [cases, activeCaseId]
-  )
   const activeUi = useMemo<CaseUiState>(
     () => (activeCaseId ? caseState[activeCaseId] ?? defaultUiState : defaultUiState),
     [caseState, activeCaseId]
@@ -93,6 +71,15 @@ export function App(): JSX.Element {
                 content: event.proposal.reason,
                 proposal: event.proposal
               }
+            ]
+          }
+        }
+        if (event.type === 'log' && event.stream === 'agent') {
+          return {
+            ...current,
+            messages: [
+              ...current.messages,
+              { id: crypto.randomUUID(), role: 'tool-use', content: event.message }
             ]
           }
         }
@@ -216,108 +203,305 @@ export function App(): JSX.Element {
     [updateCaseState]
   )
 
+  const refreshConversations = useCallback(async () => {
+    if (!recourse) {
+      return
+    }
+    const [list, records] = await Promise.all([
+      recourse.listConversations(),
+      recourse.listCases()
+    ])
+    setConversations(list)
+    setCases(records)
+    setActiveCase((current) => {
+      if (!current) {
+        return current
+      }
+      return records.find((record) => record.id === current.id) ?? current
+    })
+  }, [recourse])
+
+  const flushChatUi = useCallback(
+    async (caseId: string) => {
+      if (!recourse) {
+        return
+      }
+      const ui = caseState[caseId]
+      if (!ui) {
+        return
+      }
+      if (ui.messages.some((message) => message.streaming || message.reasoningStreaming)) {
+        return
+      }
+      await recourse.saveChatUi(caseId, toPersisted(ui))
+    },
+    [recourse, caseState]
+  )
+
+  const hydrateCaseUi = useCallback(
+    async (caseId: string) => {
+      if (!recourse || caseState[caseId]) {
+        return
+      }
+      const persisted = await recourse.loadChatUi(caseId)
+      if (persisted && persisted.messages.length > 0) {
+        setCaseState((current) => ({
+          ...current,
+          [caseId]: fromPersisted(persisted)
+        }))
+      }
+    },
+    [recourse, caseState]
+  )
+
+  const selectCase = useCallback(
+    async (caseId: string) => {
+      if (!recourse) {
+        return
+      }
+      if (activeCaseId && activeCaseId !== caseId) {
+        setDraftsByCaseId((current) => ({ ...current, [activeCaseId]: prompt }))
+        await flushChatUi(activeCaseId)
+      }
+      const record = cases.find((item) => item.id === caseId) ?? (await recourse.getCase(caseId))
+      if (!record) {
+        return
+      }
+      setActiveCase(record)
+      setPrompt(draftsByCaseId[caseId] ?? '')
+      await hydrateCaseUi(caseId)
+      if (sidebar.isNarrow) {
+        sidebar.setMobileOpen(false)
+      }
+    },
+    [
+      recourse,
+      activeCaseId,
+      prompt,
+      cases,
+      draftsByCaseId,
+      flushChatUi,
+      hydrateCaseUi,
+      sidebar
+    ]
+  )
+
+  const startNewChat = useCallback(async () => {
+    if (!recourse) {
+      return
+    }
+    if (activeCaseId) {
+      setDraftsByCaseId((current) => ({ ...current, [activeCaseId]: prompt }))
+      await flushChatUi(activeCaseId)
+    }
+    const record = await recourse.createCase({})
+    setCases((current) => [record, ...current.filter((item) => item.id !== record.id)])
+    setActiveCase(record)
+    setCaseState((current) => ({ ...current, [record.id]: defaultUiState }))
+    setPrompt('')
+    await refreshConversations()
+    if (sidebar.isNarrow) {
+      sidebar.setMobileOpen(false)
+    }
+  }, [recourse, activeCaseId, prompt, flushChatUi, refreshConversations, sidebar])
+
   useEffect(() => {
     if (!recourse) {
       return undefined
     }
 
-    void recourse.listCases().then((records) => {
-      setCases(records)
+    void (async () => {
+      await refreshConversations()
+      const records = await recourse.listCases()
       if (records.length > 0) {
-        setActiveCaseId((current) => current ?? records[0].id)
-      } else {
-        setShowNewCase(true)
+        const latest = records[0]
+        setActiveCase((current) => current ?? latest)
+        const persisted = await recourse.loadChatUi(latest.id)
+        if (persisted && persisted.messages.length > 0) {
+          setCaseState((current) =>
+            current[latest.id] ? current : { ...current, [latest.id]: fromPersisted(persisted) }
+          )
+        }
       }
-    })
+    })()
 
     return recourse.onAgentEvent(handleAgentEvent)
-  }, [recourse, handleAgentEvent])
+  }, [recourse, handleAgentEvent, refreshConversations])
+
+  useEffect(() => {
+    if (!recourse || !activeCaseId) {
+      return undefined
+    }
+    const ui = caseState[activeCaseId]
+    if (!ui || ui.messages.some((message) => message.streaming || message.reasoningStreaming)) {
+      return undefined
+    }
+    const timer = window.setTimeout(() => {
+      void recourse.saveChatUi(activeCaseId, toPersisted(ui)).then(() => refreshConversations())
+    }, 450)
+    return () => window.clearTimeout(timer)
+  }, [caseState, activeCaseId, recourse, refreshConversations])
+
+  useEffect(() => {
+    void refreshConversations()
+  }, [activeCase?.updatedAt, activeCase?.title, refreshConversations])
 
   useEffect(() => {
     transcriptRef.current?.scrollTo({
       top: transcriptRef.current.scrollHeight,
       behavior: 'smooth'
     })
-  }, [activeUi.messages])
+  }, [activeUi.messages, activeCaseId])
+
+  const transcriptMessages = activeUi.messages
+
+  const contextSummary = activeCase ? intakeSummaryLine(activeCase) : null
+  const isDev = import.meta.env.DEV
+
+  async function resetDevData(): Promise<void> {
+    if (!recourse) {
+      return
+    }
+    const confirmed = window.confirm(
+      'Delete this case and all workspace files? You will start fresh on the next message.'
+    )
+    if (!confirmed) {
+      return
+    }
+    try {
+      await recourse.resetDevData()
+      const remaining = await recourse.listCases()
+      if (remaining.length > 0) {
+        throw new Error('Case data is still on disk. Quit the app and run: npm run reset')
+      }
+      setActiveCase(undefined)
+      setCases([])
+      setConversations([])
+      setCaseState({})
+      setPendingUploads({})
+      setDraftsByCaseId({})
+      setPrompt('')
+      setUploadError(undefined)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      window.alert(`Reset failed: ${message}`)
+    }
+  }
 
   if (!recourse) {
     return <MissingBridge />
   }
 
-  async function createCase(values: NewCaseValues): Promise<void> {
+  async function ensureCase(): Promise<CaseRecord> {
     if (!recourse) {
+      throw new Error('Recourse API unavailable')
+    }
+    if (activeCase) {
+      return activeCase
+    }
+    const record = await recourse.createCase({})
+    setCases((current) => [record, ...current.filter((item) => item.id !== record.id)])
+    setActiveCase(record)
+    setCaseState((current) => ({
+      ...current,
+      [record.id]: current[record.id] ?? defaultUiState
+    }))
+    void refreshConversations()
+    return record
+  }
+
+  function appendDrafts(caseId: string, drafts: UploadDraft[]): void {
+    if (drafts.length === 0) {
       return
     }
-    const record = await recourse.createCase({
-      title: values.title,
-      intake: values.intake
-    })
-    setCases((current) => [record, ...current.filter((existing) => existing.id !== record.id)])
-    setActiveCaseId(record.id)
-    setShowNewCase(false)
-    updateCaseState(record.id, (current) => ({
-      ...current,
-      messages: [
-        {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: greetingForCase(record)
+    setPendingUploads((current) => {
+      const existing = current[caseId] ?? []
+      const seen = new Set(existing.map((draft) => draft.absolutePath))
+      const merged = [...existing]
+      for (const draft of drafts) {
+        if (!seen.has(draft.absolutePath)) {
+          merged.push(draft)
+          seen.add(draft.absolutePath)
         }
-      ]
-    }))
+      }
+      return { ...current, [caseId]: merged }
+    })
   }
 
   async function sendMessage(): Promise<void> {
-    if (!recourse || !activeCaseId) {
+    if (!recourse || isSending) {
       return
     }
-    const uploads = pendingUploads[activeCaseId] ?? []
+    const caseRecord = await ensureCase()
+    const caseId = caseRecord.id
+    const drafts = pendingUploads[caseId] ?? []
     const submitted = prompt.trim()
-    if (submitted.length === 0 && uploads.length === 0) {
+    if (submitted.length === 0 && drafts.length === 0) {
       return
+    }
+
+    setIsSending(true)
+    setUploadError(undefined)
+
+    let uploads: UploadedFile[] = []
+    if (drafts.length > 0) {
+      try {
+        uploads = await recourse.commitUploads(
+          caseId,
+          drafts.map((draft) => draft.absolutePath)
+        )
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        setUploadError(`Couldn't attach: ${message}`)
+        setIsSending(false)
+        return
+      }
     }
 
     setPrompt('')
     setPendingUploads((current) => {
       const next = { ...current }
-      delete next[activeCaseId]
+      delete next[caseId]
       return next
     })
-    updateCaseState(activeCaseId, (current) => ({
-      ...current,
-      status: 'running',
-      statusMessage: 'Sending to the agent...',
-      messages: [
-        ...current.messages,
-        {
-          id: crypto.randomUUID(),
-          role: 'user',
-          content: submitted,
-          uploads: uploads.length > 0 ? uploads : undefined
-        }
-      ]
-    }))
-    await recourse.sendMessage({
-      caseId: activeCaseId,
-      message: submitted,
-      uploads: uploads.length > 0 ? uploads : undefined
+
+    updateCaseState(caseId, (current) => {
+      return {
+        ...current,
+        status: 'running',
+        statusMessage: 'Sending to the agent…',
+        messages: [
+          ...current.messages,
+          {
+            id: crypto.randomUUID(),
+            role: 'user',
+            content: submitted,
+            uploads: uploads.length > 0 ? uploads : undefined
+          }
+        ]
+      }
     })
+
+    try {
+      await recourse.sendMessage({
+        caseId,
+        message: submitted,
+        uploads: uploads.length > 0 ? uploads : undefined
+      })
+    } finally {
+      setIsSending(false)
+    }
   }
 
   async function attachFiles(): Promise<void> {
-    if (!recourse || !activeCaseId) {
+    if (!recourse) {
       return
     }
+    const caseRecord = await ensureCase()
     setUploadError(undefined)
     try {
-      const added = await recourse.selectUploads(activeCaseId)
-      if (added.length === 0) {
-        return
-      }
-      setPendingUploads((current) => ({
-        ...current,
-        [activeCaseId]: [...(current[activeCaseId] ?? []), ...added]
-      }))
+      const drafts = await recourse.selectUploads()
+      appendDrafts(caseRecord.id, drafts)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setUploadError(message)
@@ -325,9 +509,10 @@ export function App(): JSX.Element {
   }
 
   async function attachDroppedFiles(files: File[]): Promise<void> {
-    if (!recourse || !activeCaseId || files.length === 0) {
+    if (!recourse || files.length === 0) {
       return
     }
+    const caseRecord = await ensureCase()
     setUploadError(undefined)
     try {
       const paths = files
@@ -337,27 +522,25 @@ export function App(): JSX.Element {
         setUploadError('Could not resolve a filesystem path for those files.')
         return
       }
-      const added = await recourse.addUploadsFromPaths(activeCaseId, paths)
-      if (added.length === 0) {
+      const drafts = await recourse.probeUploads(paths)
+      if (drafts.length === 0) {
+        setUploadError('None of the dropped items were readable files.')
         return
       }
-      setPendingUploads((current) => ({
-        ...current,
-        [activeCaseId]: [...(current[activeCaseId] ?? []), ...added]
-      }))
+      appendDrafts(caseRecord.id, drafts)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setUploadError(message)
     }
   }
 
-  function removePendingUpload(relativePath: string): void {
+  function removePendingUpload(absolutePath: string): void {
     if (!activeCaseId) {
       return
     }
     setPendingUploads((current) => {
       const list = current[activeCaseId] ?? []
-      const next = list.filter((upload) => upload.relativePath !== relativePath)
+      const next = list.filter((upload) => upload.absolutePath !== absolutePath)
       if (next.length === 0) {
         const updated = { ...current }
         delete updated[activeCaseId]
@@ -408,7 +591,6 @@ export function App(): JSX.Element {
 
   const dragLeaveTimer = useRef<number | undefined>(undefined)
   const onDragEnter = (event: React.DragEvent<HTMLElement>): void => {
-    if (!activeCaseId) return
     if (!event.dataTransfer.types?.includes('Files')) return
     event.preventDefault()
     if (dragLeaveTimer.current) {
@@ -418,7 +600,6 @@ export function App(): JSX.Element {
     setIsDraggingFiles(true)
   }
   const onDragOver = (event: React.DragEvent<HTMLElement>): void => {
-    if (!activeCaseId) return
     if (!event.dataTransfer.types?.includes('Files')) return
     event.preventDefault()
     event.dataTransfer.dropEffect = 'copy'
@@ -430,7 +611,6 @@ export function App(): JSX.Element {
     }, 50)
   }
   const onDrop = (event: React.DragEvent<HTMLElement>): void => {
-    if (!activeCaseId) return
     event.preventDefault()
     setIsDraggingFiles(false)
     const files = Array.from(event.dataTransfer.files ?? [])
@@ -439,185 +619,182 @@ export function App(): JSX.Element {
     }
   }
 
+  const shellClass = [
+    'app-shell',
+    isDraggingFiles ? 'dragging-files' : '',
+    sidebar.collapsed ? 'sidebar-collapsed' : 'sidebar-expanded',
+    sidebar.isNarrow ? 'is-narrow' : ''
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return (
     <main
-      className={`app-shell ${isDraggingFiles ? 'dragging-files' : ''}`}
+      className={shellClass}
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">R</span>
-          <span className="brand-name">Recourse</span>
-        </div>
-        <button type="button" className="new-case" onClick={() => setShowNewCase(true)}>
-          <span className="plus">+</span>
-          New case
-        </button>
-        <nav className="case-list">
-          {cases.length === 0 ? (
-            <p className="muted">No cases yet.</p>
-          ) : (
-            cases.map((record) => (
+      <ChatSidebar
+        conversations={conversations}
+        activeCaseId={activeCaseId}
+        collapsed={sidebar.collapsed}
+        isNarrow={sidebar.isNarrow}
+        mobileOpen={sidebar.mobileOpen}
+        onNewChat={() => void startNewChat()}
+        onSelect={(caseId) => void selectCase(caseId)}
+        onToggleCollapse={sidebar.toggle}
+        onCloseMobile={() => sidebar.setMobileOpen(false)}
+      />
+
+      <div className="main-pane">
+        <div className="chat-layout">
+          <header className="top-bar">
+            <div className="top-bar-spacer" />
+            {isDev ? (
               <button
-                key={record.id}
                 type="button"
-                className={record.id === activeCaseId ? 'case-item active' : 'case-item'}
-                onClick={() => setActiveCaseId(record.id)}
+                className="dev-reset"
+                onClick={() => void resetDevData()}
+                title="Delete all cases (dev only)"
               >
-                <span className="case-title">{record.title}</span>
-                <span className="case-sub">{caseSubtitle(record)}</span>
+                Reset
               </button>
-            ))
-          )}
-        </nav>
-        <footer className="sidebar-footer">
-          <p>California small claims · SC-100</p>
-        </footer>
-      </aside>
+            ) : null}
+          </header>
 
-      <section className="case-pane">
-        {activeCase ? (
-          <CaseView
-            record={activeCase}
-            ui={activeUi}
-            transcriptRef={transcriptRef}
-            prompt={prompt}
-            onPromptChange={setPrompt}
-            onSend={sendMessage}
-            onApprove={() => void decideProposal(true)}
-            onReject={() => void decideProposal(false)}
-            onToggleReasoning={toggleReasoning}
-            onOpenWorkspace={() => void recourse.openCaseWorkspace(activeCase.id)}
-            pendingUploads={activeUploads}
-            uploadError={uploadError}
-            onAttachFiles={() => void attachFiles()}
-            onRemoveUpload={removePendingUpload}
-            onDismissUploadError={() => setUploadError(undefined)}
-            isDraggingFiles={isDraggingFiles}
-          />
-        ) : (
-          <EmptyHero onCreate={() => setShowNewCase(true)} />
-        )}
-      </section>
+        {contextSummary ? (
+          <div className="case-context-banner">
+            <span className="eyebrow">SC-100 · Small claims</span>
+            <p className="case-context-line">{contextSummary}</p>
+          </div>
+        ) : null}
 
-      {showNewCase ? (
-        <NewCaseModal
-          onClose={() => setShowNewCase(false)}
-          onSubmit={(values) => void createCase(values)}
-        />
-      ) : null}
+        <div className="transcript" ref={transcriptRef}>
+          {transcriptMessages.map((message) => (
+            <TranscriptItem
+              key={message.id}
+              message={message}
+              onApprove={() => void decideProposal(true)}
+              onReject={() => void decideProposal(false)}
+              onToggleReasoning={() => toggleReasoning(message.id)}
+            />
+          ))}
+          {activeCaseId &&
+          activeUi.status === 'running' &&
+          !activeUi.messages.some(
+            (message) => message.streaming || message.reasoningStreaming
+          ) ? (
+            <TypingIndicator label={activeUi.statusMessage} />
+          ) : null}
+        </div>
+
+        <form
+          className="composer"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void sendMessage()
+          }}
+        >
+          {activeUploads.length > 0 || uploadError ? (
+            <div className="upload-tray">
+              {uploadError ? (
+                <button
+                  type="button"
+                  className="upload-error"
+                  onClick={() => setUploadError(undefined)}
+                  aria-label="Dismiss upload error"
+                >
+                  <span>{uploadError}</span>
+                  <span aria-hidden>×</span>
+                </button>
+              ) : null}
+              {activeUploads.map((upload) => (
+                <UploadChip
+                  key={upload.absolutePath}
+                  upload={upload}
+                  onRemove={() => removePendingUpload(upload.absolutePath)}
+                />
+              ))}
+            </div>
+          ) : null}
+          <div className="composer-input">
+            <button
+              type="button"
+              className="attach-btn"
+              onClick={() => void attachFiles()}
+              aria-label="Attach files"
+              title="Attach files"
+            >
+              <PaperclipIcon />
+            </button>
+            <textarea
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault()
+                  void sendMessage()
+                }
+              }}
+              rows={1}
+              placeholder="Message Recourse..."
+            />
+            <button
+              type="submit"
+              className="send"
+              aria-label="Send message"
+              disabled={isSending}
+            >
+              <SendIcon />
+            </button>
+          </div>
+        </form>
+
+        {isDraggingFiles ? (
+          <div className="drop-overlay" aria-hidden>
+            <div className="drop-overlay-card">
+              <PaperclipIcon />
+              <p>Drop files to attach to this case</p>
+            </div>
+          </div>
+        ) : null}
+        </div>
+      </div>
     </main>
   )
 }
 
-interface CaseViewProps {
-  record: CaseRecord
-  ui: CaseUiState
-  transcriptRef: React.RefObject<HTMLDivElement>
-  prompt: string
-  onPromptChange: (value: string) => void
-  onSend: () => Promise<void>
-  onApprove: () => void
-  onReject: () => void
-  onToggleReasoning: (messageId: string) => void
-  onOpenWorkspace: () => void
-  pendingUploads: UploadedFile[]
-  uploadError?: string
-  onAttachFiles: () => void
-  onRemoveUpload: (relativePath: string) => void
-  onDismissUploadError: () => void
-  isDraggingFiles: boolean
+function UploadChip({
+  upload,
+  onRemove
+}: {
+  upload: UploadDraft
+  onRemove: () => void
+}): JSX.Element {
+  return (
+    <span className="upload-chip" title={upload.absolutePath}>
+      <FileIcon />
+      <span className="upload-chip-name">{upload.name}</span>
+      <span className="upload-chip-size">{formatBytes(upload.size)}</span>
+      <button
+        type="button"
+        className="upload-chip-remove"
+        onClick={onRemove}
+        aria-label={`Remove ${upload.name}`}
+      >
+        ×
+      </button>
+    </span>
+  )
 }
 
-function CaseView({
-  record,
-  ui,
-  transcriptRef,
-  prompt,
-  onPromptChange,
-  onSend,
-  onApprove,
-  onReject,
-  onToggleReasoning,
-  onOpenWorkspace,
-  pendingUploads,
-  uploadError,
-  onAttachFiles,
-  onRemoveUpload,
-  onDismissUploadError,
-  isDraggingFiles
-}: CaseViewProps): JSX.Element {
-  return (
-    <>
-      <header className="case-header">
-        <div className="case-heading">
-          <p className="eyebrow">SC-100 · Small claims</p>
-          <h1>{record.title}</h1>
-          <p className="case-sub">
-            {record.intake.plaintiffName} v. {record.intake.defendantName} ·{' '}
-            {formatCurrency(record.intake.amountClaimed)} ·{' '}
-            {DEFENDANT_TYPE_LABEL[record.intake.defendantType]}
-          </p>
-        </div>
-        <div className="case-actions">
-          <button type="button" className="ghost" onClick={onOpenWorkspace}>
-            Open workspace
-          </button>
-        </div>
-      </header>
-
-      <div className="transcript" ref={transcriptRef}>
-        {ui.messages.length === 0 ? (
-          <p className="muted center">
-            Start the conversation. The agent will propose actions before changing files.
-          </p>
-        ) : (
-          ui.messages.map((message) => (
-            <TranscriptItem
-              key={message.id}
-              message={message}
-              onApprove={onApprove}
-              onReject={onReject}
-              onToggleReasoning={() => onToggleReasoning(message.id)}
-            />
-          ))
-        )}
-        {ui.status === 'running' &&
-        !ui.messages.some(
-          (message) => message.streaming || message.reasoningStreaming
-        ) ? (
-          <TypingIndicator label={ui.statusMessage} />
-        ) : null}
-      </div>
-
-      <form
-        className="composer"
-        onSubmit={(event) => {
-          event.preventDefault()
-          void onSend()
-        }}
-      >
-        <textarea
-          value={prompt}
-          onChange={(event) => onPromptChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault()
-              void onSend()
-            }
-          }}
-          rows={1}
-          placeholder="Message Recourse..."
-        />
-        <button type="submit" className="send" aria-label="Send message">
-          <SendIcon />
-        </button>
-      </form>
-    </>
-  )
+function formatBytes(size: number): string {
+  if (!Number.isFinite(size) || size < 0) return '0 B'
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function TranscriptItem({
@@ -634,8 +811,33 @@ function TranscriptItem({
   if (message.role === 'user') {
     return (
       <article className="msg user">
-        <div className="msg-content">{message.content}</div>
+        {message.content.length > 0 ? (
+          <div className="msg-content">{message.content}</div>
+        ) : null}
+        {message.uploads && message.uploads.length > 0 ? (
+          <div className="msg-uploads">
+            {message.uploads.map((upload) => (
+              <span
+                key={upload.relativePath}
+                className="msg-upload"
+                title={upload.relativePath}
+              >
+                <FileIcon />
+                <span className="msg-upload-name">{upload.name}</span>
+                <span className="msg-upload-size">{formatBytes(upload.size)}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
       </article>
+    )
+  }
+
+  if (message.role === 'tool-use') {
+    return (
+      <p className="tool-use-line" aria-live="polite">
+        {message.content}
+      </p>
     )
   }
 
@@ -789,249 +991,6 @@ function TypingIndicator({ label }: { label: string }): JSX.Element {
   )
 }
 
-function EmptyHero({ onCreate }: { onCreate: () => void }): JSX.Element {
-  return (
-    <div className="hero">
-      <p className="eyebrow">Recourse</p>
-      <h1>Help with your small claims case.</h1>
-      <p className="lede">
-        Recourse helps Californians prepare a small claims (SC-100) case. Tell us about your
-        situation and we&apos;ll walk you through the filing, step by step.
-      </p>
-      <button type="button" className="filled" onClick={onCreate}>
-        Start a new case
-      </button>
-    </div>
-  )
-}
-
-interface NewCaseValues {
-  title: string
-  intake: SmallClaimsIntake
-}
-
-function NewCaseModal({
-  onClose,
-  onSubmit
-}: {
-  onClose: () => void
-  onSubmit: (values: NewCaseValues) => void
-}): JSX.Element {
-  const [title, setTitle] = useState('')
-  const [plaintiffName, setPlaintiffName] = useState('')
-  const [plaintiffCity, setPlaintiffCity] = useState('')
-  const [defendantName, setDefendantName] = useState('')
-  const [defendantType, setDefendantType] = useState<DefendantType>('individual')
-  const [amount, setAmount] = useState('')
-  const [incidentDate, setIncidentDate] = useState('')
-  const [whatHappened, setWhatHappened] = useState('')
-  const [contacted, setContacted] = useState<'yes' | 'no'>('no')
-  const [contactNotes, setContactNotes] = useState('')
-
-  const titleValue = title.trim()
-  const amountValue = Number.parseFloat(amount)
-  const isValid =
-    titleValue.length > 0 &&
-    plaintiffName.trim().length > 0 &&
-    defendantName.trim().length > 0 &&
-    whatHappened.trim().length > 0 &&
-    Number.isFinite(amountValue) &&
-    amountValue > 0
-
-  function handleSubmit(): void {
-    if (!isValid) {
-      return
-    }
-    onSubmit({
-      title: titleValue,
-      intake: {
-        plaintiffName: plaintiffName.trim(),
-        plaintiffCity: plaintiffCity.trim(),
-        defendantName: defendantName.trim(),
-        defendantType,
-        amountClaimed: amountValue,
-        incidentDate: incidentDate.trim(),
-        whatHappened: whatHappened.trim(),
-        contactedDefendant: contacted === 'yes',
-        contactNotes: contacted === 'yes' ? contactNotes.trim() : undefined
-      }
-    })
-  }
-
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <form
-        className="modal"
-        onClick={(event) => event.stopPropagation()}
-        onSubmit={(event) => {
-          event.preventDefault()
-          handleSubmit()
-        }}
-      >
-        <header className="modal-header">
-          <p className="eyebrow">New case</p>
-          <h2>Tell us about your small claims case</h2>
-          <p className="muted">
-            We&apos;ll use this to start the filing. You can refine everything with the agent
-            afterward.
-          </p>
-        </header>
-
-        <FormField label="Case title" hint="A short label so you can find this case again.">
-          <input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="Neighbor owes me $1,400 for damaged fence"
-            autoFocus
-          />
-        </FormField>
-
-        <FieldGroup title="You (the plaintiff)">
-          <div className="row two">
-            <FormField label="Full name">
-              <input
-                value={plaintiffName}
-                onChange={(event) => setPlaintiffName(event.target.value)}
-                placeholder="Jane Doe"
-              />
-            </FormField>
-            <FormField label="City">
-              <input
-                value={plaintiffCity}
-                onChange={(event) => setPlaintiffCity(event.target.value)}
-                placeholder="Oakland"
-              />
-            </FormField>
-          </div>
-        </FieldGroup>
-
-        <FieldGroup title="The defendant">
-          <FormField label="Name of person or business">
-            <input
-              value={defendantName}
-              onChange={(event) => setDefendantName(event.target.value)}
-              placeholder="Acme Property Management LLC"
-            />
-          </FormField>
-          <FormField label="Type">
-            <div className="chip-group">
-              {(Object.keys(DEFENDANT_TYPE_LABEL) as DefendantType[]).map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  className={type === defendantType ? 'chip selected' : 'chip'}
-                  onClick={() => setDefendantType(type)}
-                >
-                  {DEFENDANT_TYPE_LABEL[type]}
-                </button>
-              ))}
-            </div>
-          </FormField>
-        </FieldGroup>
-
-        <FieldGroup title="The claim">
-          <div className="row two">
-            <FormField label="Amount claimed (USD)">
-              <input
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-                inputMode="decimal"
-                placeholder="1400"
-              />
-            </FormField>
-            <FormField label="Date of incident">
-              <input
-                type="date"
-                value={incidentDate}
-                onChange={(event) => setIncidentDate(event.target.value)}
-              />
-            </FormField>
-          </div>
-          <FormField label="What happened?">
-            <textarea
-              value={whatHappened}
-              onChange={(event) => setWhatHappened(event.target.value)}
-              rows={4}
-              placeholder="A few sentences about what happened, when, and why the defendant owes you."
-            />
-          </FormField>
-        </FieldGroup>
-
-        <FieldGroup title="Have you contacted the defendant?">
-          <div className="chip-group">
-            <button
-              type="button"
-              className={contacted === 'no' ? 'chip selected' : 'chip'}
-              onClick={() => setContacted('no')}
-            >
-              Not yet
-            </button>
-            <button
-              type="button"
-              className={contacted === 'yes' ? 'chip selected' : 'chip'}
-              onClick={() => setContacted('yes')}
-            >
-              Yes
-            </button>
-          </div>
-          {contacted === 'yes' ? (
-            <FormField label="Notes (optional)">
-              <textarea
-                value={contactNotes}
-                onChange={(event) => setContactNotes(event.target.value)}
-                rows={2}
-                placeholder="When you reached out, what they said, etc."
-              />
-            </FormField>
-          ) : null}
-        </FieldGroup>
-
-        <div className="modal-actions">
-          <button type="button" className="ghost" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className="filled" disabled={!isValid}>
-            Create case
-          </button>
-        </div>
-      </form>
-    </div>
-  )
-}
-
-function FormField({
-  label,
-  hint,
-  children
-}: {
-  label: string
-  hint?: string
-  children: React.ReactNode
-}): JSX.Element {
-  return (
-    <label className="field">
-      <span className="field-label">{label}</span>
-      {children}
-      {hint ? <span className="field-hint">{hint}</span> : null}
-    </label>
-  )
-}
-
-function FieldGroup({
-  title,
-  children
-}: {
-  title: string
-  children: React.ReactNode
-}): JSX.Element {
-  return (
-    <section className="field-group">
-      <h3>{title}</h3>
-      {children}
-    </section>
-  )
-}
-
 function MissingBridge(): JSX.Element {
   return (
     <main className="app-shell missing-bridge">
@@ -1047,6 +1006,31 @@ function MissingBridge(): JSX.Element {
   )
 }
 
+function PaperclipIcon(): JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M10.2 2.3a2.7 2.7 0 0 1 3.8 3.8L7 13.1a4.4 4.4 0 1 1-6.2-6.2L7.6 0.1l1 1L1.8 7.9a3 3 0 1 0 4.2 4.2l6.7-6.7a1.4 1.4 0 1 0-1.9-1.9L4.4 10a0.3 0.3 0 0 0 0 0.4 0.3 0.3 0 0 0 0.4 0l6.3-6.3 1 1-6.3 6.3a1.7 1.7 0 0 1-2.4-2.4l6.8-6.8z"
+        fill="currentColor"
+      />
+    </svg>
+  )
+}
+
+function FileIcon(): JSX.Element {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M3 1h6l4 4v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1zm6 0v4h4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 function SendIcon(): JSX.Element {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
@@ -1058,28 +1042,3 @@ function SendIcon(): JSX.Element {
   )
 }
 
-function greetingForCase(record: CaseRecord): string {
-  const { intake } = record
-  return [
-    `Got it — opened the case "${record.title}".`,
-    `I have ${intake.plaintiffName} v. ${intake.defendantName}, claiming ${formatCurrency(
-      intake.amountClaimed
-    )}.`,
-    'When you’re ready, I can draft your SC-100 from the intake or pull more facts. What would you like to do first?'
-  ].join(' ')
-}
-
-function caseSubtitle(record: CaseRecord): string {
-  return `${record.intake.defendantName} · ${formatCurrency(record.intake.amountClaimed)}`
-}
-
-function formatCurrency(amount: number): string {
-  if (!Number.isFinite(amount)) {
-    return '$0'
-  }
-  return amount.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0
-  })
-}

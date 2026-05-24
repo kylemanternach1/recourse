@@ -8,9 +8,11 @@ import type {
   SmallClaimsIntake,
   WorkspaceInfo
 } from '../../shared/contracts'
+import { emptyIntake } from '../../shared/intake'
 import { getCaseType } from './caseTypes'
 import { WorkspaceManager } from '../workspaces/workspaceManager'
 import { SkillSeeder } from '../skills/skillSeeder'
+import { mountStatutesInWorkspace } from '../statutes/statuteMount'
 
 interface CaseStoreFile {
   version: 1
@@ -26,7 +28,8 @@ export class CaseStore {
   constructor(
     private readonly storeFilePath: string,
     private readonly workspaceManager: WorkspaceManager,
-    private readonly skillSeeder: SkillSeeder
+    private readonly skillSeeder: SkillSeeder,
+    private readonly statutesCorpusDir: string
   ) {}
 
   async initialize(): Promise<void> {
@@ -39,7 +42,7 @@ export class CaseStore {
     try {
       const raw = await fs.readFile(this.storeFilePath, 'utf8')
       const parsed = JSON.parse(raw) as CaseStoreFile
-      this.cases = Array.isArray(parsed.cases) ? parsed.cases.filter(hasIntake) : []
+      this.cases = Array.isArray(parsed.cases) ? parsed.cases.filter(isValidCaseRecord) : []
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code
       if (code && code !== 'ENOENT') {
@@ -61,7 +64,29 @@ export class CaseStore {
     return this.cases.find((record) => record.id === caseId)
   }
 
-  async create(request: CreateCaseRequest): Promise<CaseRecord> {
+  async patchIntake(caseId: string, patch: Partial<SmallClaimsIntake>): Promise<CaseRecord | undefined> {
+    await this.initialize()
+    const target = this.cases.find((record) => record.id === caseId)
+    if (!target) {
+      return undefined
+    }
+
+    target.intake = { ...target.intake, ...patch }
+    if (patch.whatHappened?.trim() && target.title === 'New case') {
+      const snippet = patch.whatHappened.trim().slice(0, 48)
+      target.title = snippet.length < patch.whatHappened.trim().length ? `${snippet}…` : snippet
+    }
+    target.updatedAt = new Date().toISOString()
+    await fs.writeFile(
+      path.join(target.workspace.path, 'intake.md'),
+      buildIntakeMarkdown(target.title, target.intake),
+      'utf8'
+    )
+    await this.persist()
+    return target
+  }
+
+  async create(request: CreateCaseRequest = {}): Promise<CaseRecord> {
     await this.initialize()
 
     const caseType = getCaseType(SC_100_CASE_TYPE_ID)
@@ -69,32 +94,36 @@ export class CaseStore {
       throw new Error(`Missing case type: ${SC_100_CASE_TYPE_ID}`)
     }
 
+    const intake = request.intake ?? emptyIntake()
+    const title = (request.title ?? 'New case').trim() || 'New case'
+
     const id = randomUUID()
     const now = new Date().toISOString()
     const workspace: WorkspaceInfo = await this.workspaceManager.createWorkspace(
-      request.title,
-      buildWorkspaceReadme(request, caseType.name)
+      title,
+      buildWorkspaceReadme(title, intake, caseType.name)
     )
     const skills: SkillSummary[] = await this.skillSeeder.seedIntoWorkspace(
       workspace.path,
       caseType.skillIds
     )
+    await mountStatutesInWorkspace(workspace.path, this.statutesCorpusDir)
 
     await fs.writeFile(
       path.join(workspace.path, 'intake.md'),
-      buildIntakeMarkdown(request.title, request.intake),
+      buildIntakeMarkdown(title, intake),
       'utf8'
     )
 
     const record: CaseRecord = {
       id,
-      title: request.title.trim(),
+      title,
       caseTypeId: caseType.id,
       policyPresetId: caseType.defaultPolicyPresetId,
       customDomains: [],
       workspace,
       skills,
-      intake: request.intake,
+      intake,
       createdAt: now,
       updatedAt: now
     }
@@ -102,6 +131,23 @@ export class CaseStore {
     this.cases.push(record)
     await this.persist()
     return record
+  }
+
+  /** Delete every case, workspace folder, and persisted store (dev reset). */
+  async resetAll(): Promise<void> {
+    await this.initialize()
+    const workspacePaths = this.cases.map((record) => record.workspace.path)
+    this.cases = []
+    await this.persist()
+
+    for (const workspacePath of workspacePaths) {
+      try {
+        await fs.rm(workspacePath, { recursive: true, force: true })
+      } catch (error) {
+        console.warn(`[recourse] Could not remove workspace ${workspacePath}:`, error)
+      }
+    }
+    await this.workspaceManager.resetAll()
   }
 
   async touch(caseId: string): Promise<void> {
@@ -120,41 +166,68 @@ export class CaseStore {
   }
 }
 
-function hasIntake(record: CaseRecord): boolean {
-  return Boolean(record.intake && typeof record.intake.plaintiffName === 'string')
+function isValidCaseRecord(record: CaseRecord): boolean {
+  return Boolean(record?.id && record.workspace?.path && record.intake)
 }
 
-function buildWorkspaceReadme(request: CreateCaseRequest, caseTypeName: string): string {
-  const { intake } = request
+function buildWorkspaceReadme(
+  title: string,
+  intake: SmallClaimsIntake,
+  caseTypeName: string
+): string {
+  const intakeStarted = isIntakeStarted(intake)
   return [
-    `# ${request.title}`,
+    `# ${title}`,
     '',
     `**Case type:** ${caseTypeName}`,
-    `**Plaintiff:** ${intake.plaintiffName} (${intake.plaintiffCity})`,
-    `**Defendant:** ${intake.defendantName} (${formatDefendantType(intake.defendantType)})`,
-    `**Amount claimed:** ${formatCurrency(intake.amountClaimed)}`,
-    `**Incident date:** ${intake.incidentDate}`,
+    intakeStarted
+      ? [
+          `**Plaintiff:** ${intake.plaintiffName || '—'} (${intake.plaintiffCity || '—'})`,
+          `**Defendant:** ${intake.defendantName || '—'} (${formatDefendantType(intake.defendantType)})`,
+          `**Amount claimed:** ${formatCurrency(intake.amountClaimed)}`,
+          `**Incident date:** ${intake.incidentDate || '—'}`
+        ].join('\n')
+      : '_Intake in progress — details are collected in chat and saved to `intake.md`._',
     '',
     '## What happened',
     '',
-    intake.whatHappened.trim() || '_No description provided._',
+    intake.whatHappened.trim() || '_No description yet._',
     '',
     '## Files',
     '',
-    '- `intake.md` — structured intake provided when the case was created.',
+    '- `intake.md` — structured intake (updated as the conversation progresses).',
     '- `skills/` — installed skill folders (e.g. `sc-100-small-claims/`).',
+    '- `statutes/ca/` — California code corpus (search with `rg`, read slices with `read_file`).',
     '- `draft/` — drafts of forms and documents (created by the agent).',
     ''
   ].join('\n')
 }
 
+function isIntakeStarted(intake: SmallClaimsIntake): boolean {
+  return (
+    intake.plaintiffName.trim().length > 0 ||
+    intake.defendantName.trim().length > 0 ||
+    intake.whatHappened.trim().length > 0 ||
+    intake.amountClaimed > 0
+  )
+}
+
 function buildIntakeMarkdown(title: string, intake: SmallClaimsIntake): string {
+  if (!isIntakeStarted(intake)) {
+    return [
+      `# Intake — ${title}`,
+      '',
+      '_In progress. The agent collects details in conversation and updates this file as facts are confirmed._',
+      ''
+    ].join('\n')
+  }
+
   return [
     `# Intake — ${title}`,
     '',
     '## Plaintiff',
-    `- Name: ${intake.plaintiffName}`,
-    `- City: ${intake.plaintiffCity}`,
+    `- Name: ${intake.plaintiffName || '—'}`,
+    `- City: ${intake.plaintiffCity || '—'}`,
     '',
     '## Defendant',
     `- Name: ${intake.defendantName}`,

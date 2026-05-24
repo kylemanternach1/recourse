@@ -79,8 +79,10 @@ export interface CaseRecord {
 }
 
 export interface CreateCaseRequest {
-  title: string
-  intake: SmallClaimsIntake
+  /** Defaults to "New case" when omitted. */
+  title?: string
+  /** Defaults to an empty intake for chat-first onboarding. */
+  intake?: SmallClaimsIntake
 }
 
 export interface CommandProposal {
@@ -111,6 +113,41 @@ export type AgentEvent =
   | { type: 'reasoning-delta'; caseId: string; messageId: string; delta: string }
   | { type: 'reasoning-end'; caseId: string; messageId: string }
   | { type: 'error'; caseId: string; message: string }
+
+/** A user-selected file that has been stat'd but not yet copied into the case workspace. */
+export interface UploadDraft {
+  /** Filename for display. */
+  name: string
+  /** Absolute path on the user's disk. */
+  absolutePath: string
+  /** Size in bytes. */
+  size: number
+  /** Best-effort MIME type, or undefined. */
+  mimeType?: string
+}
+
+export interface ToolCheck {
+  /** Identifier (binary name or runtime id). */
+  name: string
+  /** What this tool is used for, surfaced as helper text. */
+  purpose: string
+  /** Suggested install command for macOS. */
+  installHint: string
+  available: boolean
+  /** Absolute path the tool was discovered at, if any. */
+  path?: string
+}
+
+export interface ToolCheckResult {
+  /** Per-tool details. */
+  tools: ToolCheck[]
+  /** Which of the document skills are present on disk. */
+  skills: Array<{ id: string; available: boolean }>
+  /** Whether the CA statute corpus is installed. */
+  statutesReady: boolean
+  /** Quick summary: are the critical tools (qpdf/pdftoppm/tesseract + runtimes) available? */
+  runtimeReady: boolean
+}
 
 export interface UploadedFile {
   /** Filename inside <workspace>/uploads/. Unique per case (collisions get a numeric suffix). */
@@ -148,4 +185,30 @@ export interface LlmMessage {
   content: string | null
   toolCalls?: LlmToolCall[]
   toolCallId?: string
+}
+
+/** Serializable chat transcript for UI restore (per case workspace). */
+export interface PersistedChatMessage {
+  id: string
+  role: 'user' | 'assistant' | 'system' | 'tool-use'
+  content: string
+  proposal?: CommandProposal
+  reasoning?: string
+  reasoningExpanded?: boolean
+  uploads?: UploadedFile[]
+}
+
+export interface PersistedChatUi {
+  messages: PersistedChatMessage[]
+  status: AgentStatus
+  statusMessage: string
+  lastPreview?: string
+}
+
+export interface ConversationListItem {
+  caseId: string
+  title: string
+  subtitle?: string
+  preview?: string
+  updatedAt: string
 }

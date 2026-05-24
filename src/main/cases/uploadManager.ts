@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import type { CaseRecord, UploadedFile } from '../../shared/contracts'
+import type { CaseRecord, UploadDraft, UploadedFile } from '../../shared/contracts'
 import type { CaseStore } from './caseStore'
 
 const UPLOADS_DIR = 'uploads'
@@ -25,6 +25,24 @@ const MIME_BY_EXTENSION: Record<string, string> = {
 
 export class UploadManager {
   constructor(private readonly caseStore: CaseStore) {}
+
+  async probe(sourcePaths: string[]): Promise<UploadDraft[]> {
+    const drafts: UploadDraft[] = []
+    for (const sourcePath of sourcePaths) {
+      const stat = await fs.stat(sourcePath).catch(() => undefined)
+      if (!stat || !stat.isFile()) {
+        continue
+      }
+      const baseName = path.basename(sourcePath)
+      drafts.push({
+        name: baseName,
+        absolutePath: sourcePath,
+        size: stat.size,
+        mimeType: MIME_BY_EXTENSION[path.extname(baseName).toLowerCase()]
+      })
+    }
+    return drafts
+  }
 
   async addUploads(caseId: string, sourcePaths: string[]): Promise<UploadedFile[]> {
     const record = await this.caseStore.get(caseId)

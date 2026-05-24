@@ -5,7 +5,8 @@ import dotenv from 'dotenv'
 import type {
   ApprovalDecision,
   CreateCaseRequest,
-  SendMessageRequest
+  SendMessageRequest,
+  SmallClaimsIntake
 } from '../shared/contracts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -13,6 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.join(app.getAppPath(), '.env') })
 dotenv.config({ path: path.join(process.cwd(), '.env') })
 import { AgentCore } from './agent/agentCore'
+import { ChatService } from './chat/chatService'
 import { CaseStore } from './cases/caseStore'
 import { CASE_TYPES } from './cases/caseTypes'
 import { UploadManager } from './cases/uploadManager'
@@ -21,12 +23,16 @@ import { POLICY_PRESETS } from './sandbox/policies'
 import { SandboxRunner } from './sandbox/sandboxRunner'
 import { SkillCatalog } from './skills/skillCatalog'
 import { SkillSeeder } from './skills/skillSeeder'
+import { ToolsDoctor } from './skills/toolsDoctor'
+import { isCorpusReady, resolveStatutesCorpusDir } from './statutes/statuteMount'
 import { WorkspaceManager } from './workspaces/workspaceManager'
 
 let mainWindow: BrowserWindow | undefined
 let agentCore: AgentCore | undefined
 let caseStore: CaseStore | undefined
 let uploadManager: UploadManager | undefined
+let toolsDoctor: ToolsDoctor | undefined
+let chatService: ChatService | undefined
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -62,12 +68,20 @@ function bootstrap(): void {
   const workspaceManager = new WorkspaceManager(path.join(app.getPath('userData'), 'workspaces'))
   const skillCatalog = new SkillCatalog(resourcesRoot)
   const skillSeeder = new SkillSeeder(skillCatalog)
+  const statutesCorpusDir = resolveStatutesCorpusDir(
+    app.getAppPath(),
+    app.isPackaged,
+    app.getPath('userData')
+  )
   caseStore = new CaseStore(
     path.join(app.getPath('userData'), 'cases.json'),
     workspaceManager,
-    skillSeeder
+    skillSeeder,
+    statutesCorpusDir
   )
   uploadManager = new UploadManager(caseStore)
+  chatService = new ChatService(caseStore)
+  toolsDoctor = new ToolsDoctor(resourcesRoot, statutesCorpusDir)
   const llmProvider = new OpenAICompatibleProvider()
   if (!llmProvider.isConfigured()) {
     console.warn(
@@ -76,10 +90,18 @@ function bootstrap(): void {
   } else {
     console.log('[recourse] LLM provider configured.')
   }
+  void isCorpusReady(statutesCorpusDir).then((ready) => {
+    if (!ready) {
+      console.warn(
+        '[recourse] CA statute corpus not installed. Run ./scripts/sync-skills.sh --statutes'
+      )
+    }
+  })
   agentCore = new AgentCore(
     caseStore,
     new SandboxRunner(),
     llmProvider,
+    statutesCorpusDir,
     (event) => mainWindow?.webContents.send('agent:event', event)
   )
 }
@@ -103,12 +125,39 @@ app.on('window-all-closed', () => {
 
 ipcMain.handle('policy:list', () => POLICY_PRESETS)
 ipcMain.handle('case-type:list', () => CASE_TYPES)
+ipcMain.handle('tools:check', async () => {
+  if (!toolsDoctor) {
+    throw new Error('Tools doctor not ready.')
+  }
+  return toolsDoctor.check()
+})
 
 ipcMain.handle('case:list', async () => {
   if (!caseStore) {
     throw new Error('Case store not ready.')
   }
   return caseStore.list()
+})
+
+ipcMain.handle('chat:list-conversations', async () => {
+  if (!chatService) {
+    throw new Error('Chat service not ready.')
+  }
+  return chatService.listConversations()
+})
+
+ipcMain.handle('chat:load-ui', async (_, caseId: string) => {
+  if (!chatService) {
+    throw new Error('Chat service not ready.')
+  }
+  return chatService.loadUi(caseId)
+})
+
+ipcMain.handle('chat:save-ui', async (_, caseId: string, ui: import('../shared/contracts').PersistedChatUi) => {
+  if (!chatService) {
+    throw new Error('Chat service not ready.')
+  }
+  await chatService.saveUi(caseId, ui)
 })
 
 ipcMain.handle('case:get', async (_, caseId: string) => {
@@ -125,6 +174,28 @@ ipcMain.handle('case:create', async (_, request: CreateCaseRequest) => {
   return caseStore.create(request)
 })
 
+ipcMain.handle('dev:reset', async () => {
+  if (!caseStore || !agentCore) {
+    throw new Error('App is not ready.')
+  }
+  agentCore.resetSession()
+  await caseStore.resetAll()
+  const remaining = await caseStore.list()
+  if (remaining.length > 0) {
+    throw new Error('Reset incomplete — case data is still on disk.')
+  }
+})
+
+ipcMain.handle(
+  'case:patch-intake',
+  async (_, caseId: string, patch: Partial<SmallClaimsIntake>) => {
+    if (!caseStore) {
+      throw new Error('Case store not ready.')
+    }
+    return caseStore.patchIntake(caseId, patch)
+  }
+)
+
 ipcMain.handle('case:open-workspace', async (_, caseId: string) => {
   if (!caseStore) {
     throw new Error('Case store not ready.')
@@ -137,7 +208,7 @@ ipcMain.handle('case:open-workspace', async (_, caseId: string) => {
   return true
 })
 
-ipcMain.handle('case:select-uploads', async (_, caseId: string) => {
+ipcMain.handle('case:select-uploads', async () => {
   if (!uploadManager) {
     throw new Error('Upload manager not ready.')
   }
@@ -152,7 +223,14 @@ ipcMain.handle('case:select-uploads', async (_, caseId: string) => {
   if (result.canceled || result.filePaths.length === 0) {
     return []
   }
-  return uploadManager.addUploads(caseId, result.filePaths)
+  return uploadManager.probe(result.filePaths)
+})
+
+ipcMain.handle('case:probe-uploads', async (_, sourcePaths: string[]) => {
+  if (!uploadManager) {
+    throw new Error('Upload manager not ready.')
+  }
+  return uploadManager.probe(sourcePaths)
 })
 
 ipcMain.handle(

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 96" width="320" height="96" role="img" aria-label="Recourse">
+  <rect x="8" y="8" width="80" height="80" rx="18" ry="18" fill="#c96442"/>
+  <text
+    x="48"
+    y="68"
+    text-anchor="middle"
+    font-family="'Tiempos Text', 'Iowan Old Style', 'Georgia', 'Times New Roman', serif"
+    font-weight="500"
+    font-size="52"
+    fill="#ffffff"
+  >R</text>
+  <text
+    x="106"
+    y="62"
+    font-family="'Inter', -apple-system, 'Helvetica Neue', 'Arial', sans-serif"
+    font-weight="700"
+    font-size="38"
+    letter-spacing="-0.6"
+    fill="#1f1f1c"
+  >Recourse</text>
+</svg>

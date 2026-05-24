@@ -9,3 +9,16 @@ dist
 # CA codes scraper output
 scripts/ca_codes/data/
 scripts/ca_codes/.cache/
+
+# Document skills fetched from upstream (anthropics/skills) via scripts/sync-skills.sh.
+# These are source-available under Anthropic's license; we don't redistribute them in this repo.
+resources/skills/pdf/
+resources/skills/docx/
+resources/skills/pptx/
+resources/skills/xlsx/
+
+# Project-local Python venv + node_modules for skill runtime
+.recourse-runtime/
+
+# CA statute corpus (installed via scripts/sync-skills.sh --statutes)
+resources/statutes/

@@ -32,6 +32,12 @@ export class WorkspaceManager {
       createdAt
     }
   }
+
+  /** Remove all case workspace folders (dev reset). */
+  async resetAll(): Promise<void> {
+    await fs.rm(this.basePath, { recursive: true, force: true })
+    await this.initialize()
+  }
 }
 
 function sanitizeName(value: string): string {

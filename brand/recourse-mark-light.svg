@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Recourse">
+  <rect x="0" y="0" width="64" height="64" rx="14" ry="14" fill="#faf8f5"/>
+  <text
+    x="32"
+    y="46"
+    text-anchor="middle"
+    font-family="'Tiempos Text', 'Iowan Old Style', 'Georgia', 'Times New Roman', serif"
+    font-weight="500"
+    font-size="42"
+    fill="#c96442"
+  >R</text>
+</svg>

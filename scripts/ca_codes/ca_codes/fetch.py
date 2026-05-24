@@ -83,10 +83,32 @@ class RequestsFetcher:
             }
         )
         _load_cookies(self.session, config.cookie_file)
+        self._load_browser_cookies()
         self._playwright = None
         self._browser = None
         self._page = None
+        self._playwright_lock = threading.Lock()
         self._backend = self._resolve_backend()
+
+    def _load_browser_cookies(self) -> None:
+        if self.config.cookie_file:
+            return
+        try:
+            import browser_cookie3
+        except ImportError:
+            return
+        for loader in (browser_cookie3.chrome, browser_cookie3.safari, browser_cookie3.firefox):
+            try:
+                jar = loader(domain_name="justia.com")
+                count = 0
+                for cookie in jar:
+                    self.session.cookies.set_cookie(cookie)
+                    count += 1
+                if count:
+                    log.info("Loaded %d cookies from %s for justia.com", count, loader.__name__)
+                    return
+            except Exception:
+                continue
 
     def _resolve_backend(self) -> str:
         backend = self.config.fetch_backend
@@ -100,10 +122,18 @@ class RequestsFetcher:
             return "requests"
 
     def close(self) -> None:
-        if self._browser:
-            self._browser.close()
-        if self._playwright:
-            self._playwright.stop()
+        with self._playwright_lock:
+            try:
+                if self._browser:
+                    self._browser.close()
+                if self._playwright:
+                    self._playwright.stop()
+            except Exception as exc:  # noqa: BLE001
+                log.debug("playwright cleanup: %s", exc)
+            finally:
+                self._browser = None
+                self._playwright = None
+                self._page = None
 
     def get(self, url: str) -> FetchResult | None:
         cached = self._read_cache(url)
@@ -163,25 +193,49 @@ class RequestsFetcher:
         return resp.text, resp.status_code
 
     def _fetch_playwright(self, url: str) -> tuple[str, int]:
-        if self._page is None:
-            from playwright.sync_api import sync_playwright
+        with self._playwright_lock:
+            if self._page is None:
+                from playwright.sync_api import sync_playwright
 
-            self._playwright = sync_playwright().start()
-            self._browser = self._playwright.chromium.launch(headless=True)
-            context = self._browser.new_context(user_agent=self.config.user_agent)
-            if self.config.cookie_file:
-                # Best-effort: load cookies into playwright context.
-                self._load_playwright_cookies(context)
-            self._page = context.new_page()
+                self._playwright = sync_playwright().start()
+                launch_kwargs: dict = {
+                    "headless": True,
+                    "args": ["--disable-blink-features=AutomationControlled"],
+                }
+                try:
+                    self._browser = self._playwright.chromium.launch(
+                        channel="chrome", **launch_kwargs
+                    )
+                except Exception:
+                    self._browser = self._playwright.chromium.launch(**launch_kwargs)
+                context = self._browser.new_context(user_agent=self.config.user_agent)
+                if self.config.cookie_file:
+                    self._load_playwright_cookies(context)
+                else:
+                    cookies = [
+                        {
+                            "name": c.name,
+                            "value": c.value,
+                            "domain": c.domain,
+                            "path": c.path or "/",
+                        }
+                        for c in self.session.cookies
+                        if c.domain and "justia" in c.domain
+                    ]
+                    if cookies:
+                        context.add_cookies(cookies)
+                self._page = context.new_page()
 
-        self._page.goto(url, wait_until="domcontentloaded", timeout=int(self.config.timeout * 1000))
-        # Allow Cloudflare challenge JS to finish.
-        for _ in range(20):
-            html = self._page.content()
-            if not _is_cloudflare_challenge(html):
-                break
-            time.sleep(0.5)
-        return self._page.content(), 200
+            self._page.goto(
+                url, wait_until="domcontentloaded", timeout=int(self.config.timeout * 1000)
+            )
+            html = ""
+            for _ in range(90):
+                html = self._page.content()
+                if not _is_cloudflare_challenge(html):
+                    break
+                time.sleep(1.0)
+            return html, 200
 
     def _load_playwright_cookies(self, context) -> None:
         jar = http.cookiejar.MozillaCookieJar(str(self.config.cookie_file))

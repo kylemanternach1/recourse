@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import path from 'node:path'
 import type { SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime'
 import type { SandboxPolicy, SandboxRunResult } from '../../shared/contracts'
+import { prependRuntimePath, resolveRuntimePaths } from '../skills/runtimePaths'
 import { toSandboxRuntimeConfig } from './policies'
 
 export interface SandboxRunOptions {
@@ -107,8 +108,11 @@ export class SandboxRunner {
       let stderr = ''
 
       const isOpen = options.policy.presetId === 'open'
+      const runtime = resolveRuntimePaths()
       const env: NodeJS.ProcessEnv = {
         ...process.env,
+        PATH: prependRuntimePath(process.env.PATH),
+        VIRTUAL_ENV: runtime.venvDir,
         RECOURSE_WORKSPACE: options.policy.workspacePath
       }
       if (!isOpen) {

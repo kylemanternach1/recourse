@@ -1,0 +1,24 @@
+base_url: https://law.justia.com
+year: "2025"
+
+code_slugs:
+  - code-civ
+
+output: data/ca_codes.jsonl
+output_format: jsonl
+
+rate_limit: 1.0
+workers: 4
+timeout: 30
+retries: 3
+retry_backoff: 1.5
+
+# Full crawl — no page limit
+max_pages: null
+
+resume: true
+state_file: data/.ca_codes_state.json
+
+fetch_backend: auto
+
+user_agent: "Recourse-CA-Codes-Scraper/1.0 (+local research; contact: you@example.com)"

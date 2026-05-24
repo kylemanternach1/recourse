@@ -230,10 +230,13 @@ class CodeCrawler:
         if not self._inc_pages():
             return [], []
 
-        self.state_store.mark_visited(url)
         result = self.fetcher.get(url)
         if not result:
+            self.state_store.state.failures.append(url)
+            log.error("could not fetch index page: %s", url)
             return [], []
+
+        self.state_store.mark_visited(url)
 
         path = urlparse(url).path
         if prefix not in path:
@@ -257,15 +260,16 @@ class CodeCrawler:
         if not self._inc_pages():
             return
 
+        result = self.fetcher.get(url)
+        if not result:
+            self.state_store.state.failures.append(url)
+            log.error("could not fetch section: %s", url)
+            return
+
         url = normalize_url(url)
         if self.state_store.is_visited(url):
             return
         self.state_store.mark_visited(url)
-
-        result = self.fetcher.get(url)
-        if not result:
-            self.state_store.state.failures.append(url)
-            return
 
         record = parse_section(url, result.soup, self.config.year)
         if not record:
