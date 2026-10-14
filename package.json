@@ -11,7 +11,7 @@
     "setup:skills": "./scripts/sync-skills.sh",
     "reset": "./scripts/reset-dev-data.sh",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "build:web": "vite build --config vite.web.config.ts"
+    "build:web": "vite build"
   },
   "dependencies": {
     "@anthropic-ai/sandbox-runtime": "^0.0.52",
